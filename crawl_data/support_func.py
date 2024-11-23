@@ -5,7 +5,7 @@ from colorama import Fore, Style
 from global_variable.variable_static import terminal_width
 
 # Cần chỉnh sửa theo tùy loại text
-# style = ['big', 'small', 'try_again', 'success']
+# style = ['big', 'small', 'danger', 'success']
 def print_banner_colored(title: str = '', style='small'):
     text_default = {
         'small': 'FOR TITLE OF SOME SMALL THING :>',
