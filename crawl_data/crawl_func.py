@@ -4,10 +4,10 @@ import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.proxy import Proxy, ProxyType
-from selenium.webdriver.chrome.service import Service
 from global_variable.variable_file_reader import proxies_list
 from crawl_data.support_func import string_to_dict, print_banner_colored
 from datetime import datetime
+from working_with_file.file_func import save_data, save_change_page_link_num
 
 def get_proxy_random(proxies_list_custom = None): 
     # If not have custom, get global value
@@ -95,7 +95,7 @@ def get_all_links_in_page(base_link, page_num, try_again = 0):
         driver.close()
 
         if try_again <= 5:
-            print_banner_colored(style='try_again')
+            print_banner_colored(style='danger')
             return get_all_links_in_page(base_link, page_num, try_again + 1)
         else:
             raise ValueError("Need to get again, can't get this page!!!!")
@@ -235,8 +235,10 @@ def get_data_in_link(scope_element, link, pos = None, try_again = 0):
             displayed_data_container[key] = value    
 
     # TIME CRAWL THIS POST
+        # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
+        # Example of ISO Format: 2021-07-27T16:02:08.070557
         now = {
-            'time_scraping': datetime.now()
+            'time_scraping': datetime.now().isoformat()
         }
 
         full_data = {}
@@ -245,16 +247,18 @@ def get_data_in_link(scope_element, link, pos = None, try_again = 0):
         full_data.update(displayed_data_container)
         full_data.update(now)
 
-        return {
+        data = {
             'data': full_data,
             'page_source': page_source
         }
+
+        return data
 
     except:
         scope_element.close()
         
         if try_again <= 5:
-            print_banner_colored(style='try_again')
+            print_banner_colored(style='danger')
             return get_data_in_link(get_new_driver(), link, try_again + 1)
         else:
             raise ValueError("Can't get data from this page for some reason!!!!")
@@ -270,14 +274,15 @@ def crawl(base_link):
 
         for index, link in enumerate(all_links):
             if index >= link_num: 
-                data = get_data_in_link(driver, link, index + 1)
-                # print(data['data'])
-                # Add to file .... (both data and page_source)
+                data = get_data_in_link(driver, link, index)
+
+                # Save data (data normal and page source)
+                save_data(data)
                 
-                # If success then change file previous_crawl.txt
-                with open('./working_with_file/save_data/previous_crawl.txt', 'w') as file:
-                    file.write(f'{page_num}\n{index + 1}')
+                # If success then change file previous_crawl.txt to next post
+                save_change_page_link_num(page_num, index + 1)
+
                 print_banner_colored(style='success')
         
-        with open('./working_with_file/save_data/previous_crawl.txt', 'w') as file:
-            file.write(f'{page_num}\n{0}')
+        # If crawl all link then change file previous_crawl.txt to next page and reset link_num to 0
+        save_change_page_link_num(page_num + 1, 0)
