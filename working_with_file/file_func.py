@@ -45,9 +45,3 @@ def save_data(data):
     with open(path_page_source, 'w') as file:
         json.dump(merged_page_source, file, ensure_ascii=False)
     
-
-def save_change_page_link_num(page_num, link_num):
-    path = Path('./working_with_file/save_data/previous_crawl.json')
-
-    with open(path, 'w') as file:
-        file.write(f'{page_num}\n{link_num}')

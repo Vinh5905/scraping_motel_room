@@ -1,8 +1,10 @@
-from crawl_data.crawl_func import crawl
+from crawl_data.crawl_func import Crawl
+import time
 
 # Cần chỉnh sửa cho từng error như timeout, privacy, ...
 
 if __name__ == '__main__':
     base = 'https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
-
-    crawl(base)
+    
+    run = Crawl(base)
+    run.crawl()

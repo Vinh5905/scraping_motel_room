@@ -1,13 +1,16 @@
+from pathlib import Path
 import random
 import time
 import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.service import Service
 from selenium.webdriver.common.proxy import Proxy, ProxyType
+from webdriver_manager.chrome import ChromeDriverManager
 from global_variable.variable_file_reader import proxies_list
 from crawl_data.support_func import string_to_dict, print_banner_colored
 from datetime import datetime
-from working_with_file.file_func import save_data, save_change_page_link_num
+from working_with_file.file_func import save_data
 
 def get_proxy_random(proxies_list_custom = None): 
     # If not have custom, get global value
@@ -26,7 +29,7 @@ def get_proxy_random(proxies_list_custom = None):
 def get_new_driver(chorme_options_custom = None):
     # If not have custom then use default self-config
     chrome_options = chorme_options_custom or webdriver.ChromeOptions()
-    # chrome_service = Service(executable_path='./chromedriver-mac-x64/chromedriver')
+    # chrome_service = Service(ChromeDriverManager().install())
 
     if not chorme_options_custom:
         chrome_options.add_argument("--start-maximized")
@@ -36,7 +39,11 @@ def get_new_driver(chorme_options_custom = None):
         # chrome_options.add_argument("--incognito")
         chrome_options.proxy = get_proxy_random()
 
+        # user_agent_string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        # chrome_options.add_argument(f"user-agent={user_agent_string}")
+
     driver = webdriver.Chrome(options=chrome_options)
+    # driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     driver.implicitly_wait(5)
 
     return driver
@@ -47,242 +54,262 @@ def get_link_page(base_link, page_num):
         return base_link
     else: 
         return f'{base_link}/p{page_num}'
+    
+class Crawl():
+    __base_link = None
+    __page_num = None
+    __link_num = None
+    driver = None
 
+    def __init__(self, base_link):
+        self.driver = get_new_driver()
+        self.__base_link = base_link
 
-def get_data_safe(scope_element, text_selector, multi_value = False, return_text = False, attr = ''):
-    # Default is driver
-    try:
-        if multi_value:
+        with open('./working_with_file/save_data/previous_crawl.txt', 'r') as file:
+                self.__page_num, self.__link_num = map(int, file.read().splitlines())
 
-            elements = scope_element.find_elements(By.CSS_SELECTOR, value = text_selector)
+    def get_data_safe(self, text_selector, scope_element = None, multi_value = False, return_text = False, attr = ''):
+        scope_element = scope_element or self.driver
+        
+        try:
+            if multi_value:
+                elements = scope_element.find_elements(By.CSS_SELECTOR, value = text_selector)
 
-            if len(elements) == 0: return None
-            if return_text:
-                return [element.text for element in elements]
-            elif attr:
-                return [element.get_attribute(attr) for element in elements if element.get_attribute(attr)]
+                if len(elements) == 0: return None
+                if return_text:
+                    return [element.text for element in elements]
+                elif attr:
+                    return [element.get_attribute(attr) for element in elements if element.get_attribute(attr)]
+                else:
+                    return elements 
             else:
-                return elements 
-        else:
-            element = scope_element.find_element(By.CSS_SELECTOR, value = text_selector)
-            if return_text:
-                return element.text
-            elif attr:
-                return element.get_attribute(attr)
+                element = scope_element.find_element(By.CSS_SELECTOR, value = text_selector)
+                if return_text:
+                    return element.text
+                elif attr:
+                    return element.get_attribute(attr)
+                else:
+                    return elements 
+        except:
+            return None
+
+    def get_all_links_in_page(self, page = None, try_again = 0):
+        time.sleep(2)
+        page = page or self.__page_num
+
+        if not try_again:
+            print_banner_colored(f"LẤY TẤT CẢ LINK CỦA TRANG {page}", 'big')
+
+        try: 
+            self.quit_current_driver()
+            self.driver = get_new_driver()
+
+            self.driver.get(get_link_page(self.__base_link, page))
+
+            all_links = self.get_data_safe('.js__card.js__card-full-web > .js__product-link-for-product-id', multi_value=True, attr='href')
+
+            if not len(all_links): 
+                raise ValueError("No links found!!!!")
             else:
-                return elements 
-    except:
-        return None
+                print_banner_colored(style='success')
+                return all_links
+            
+        except:
+            if try_again < 5:
+                print_banner_colored(style='danger')
+                return self.get_all_links_in_page(try_again=(try_again + 1))
+            else:
+                raise ValueError("Need to get again, can't get this page!!!!")
+            
 
+    def get_data_in_link(self, link, try_again = 0):
+        time.sleep(2)
 
-def get_all_links_in_page(base_link, page_num, try_again = 0):
-    time.sleep(2)
-    if not try_again:
-        print_banner_colored(f"LẤY TẤT CẢ LINK CỦA TRANG {page_num}", 'big')
+        if not try_again:
+            print_banner_colored(f"LẤY DỮ LIỆU CỦA BÀI POST {self.__link_num}", 'small')
 
-    try: 
-        driver = get_new_driver()
-        driver.get(get_link_page(base_link, page_num))
+        try:
+            # Start to get open link
+            self.driver.get(link)
+            time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
 
-        all_links = get_data_safe(driver, '.js__card.js__card-full-web > .js__product-link-for-product-id', multi_value=True, attr='href')
-
-        if not len(all_links): 
-            raise ValueError("No links found!!!!")
-        else:
-            print_banner_colored(style='success')
-            return all_links
-    except:
-        driver.close()
-
-        if try_again <= 5:
-            print_banner_colored(style='danger')
-            return get_all_links_in_page(base_link, page_num, try_again + 1)
-        else:
-            raise ValueError("Need to get again, can't get this page!!!!")
-        
-
-def get_data_in_link(scope_element, link, pos = None, try_again = 0):
-    time.sleep(2)
-
-    if not try_again:
-        if pos:
-            print_banner_colored(f"LẤY DỮ LIỆU CỦA BÀI POST {pos}", 'small')
-        else:
-            print_banner_colored("LẤY DỮ LIỆU CỦA BÀI POST", 'small')
-
-    try:
-        # Start to get open link
-        scope_element.get(link)
-        time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
-
-        page_source = scope_element.page_source
-    # DATA IN SCRIPT ELEMENT (NOT SHOW IN UI - ABOUT PRODUCT) - see in ./image/example/undisplayed_data.png
-        # Get data inside all script elements
-        script_elements = get_data_safe(scope_element, 'script[type="text/javascript"]', multi_value=True, attr='innerHTML') # script
-        undisplayed_data_container = '' # contain text inside script
-        for script in script_elements:
-            # If conditions is correct then that is element we need (only one exists)
-            if script.find('getListingRecommendationParams') != -1:
-                undisplayed_data_container = script
-                break
-
-        # Position of the dict we need in type string (start - end)
-        undisplayed_text_start = 0
-        undisplayed_text_end = 0
-
-        # You can see picture to know why
-        for i in range(len(undisplayed_data_container)):
-            # get nearest {
-            if undisplayed_data_container[i] == '{': 
-                undisplayed_text_start = i
-            # get first }
-            if undisplayed_data_container[i] == '}':
-                undisplayed_text_end = i
-                break
-        
-        # Get dict but in type string
-        undisplayed_in_curly_braces = undisplayed_data_container[undisplayed_text_start:(undisplayed_text_end + 1)]
-        # Change to dict
-        undisplayed_info = string_to_dict(undisplayed_in_curly_braces)
-
-
-    # DATA IN SCRIPT ELEMEMENT (CAN SHOW SOME IN UI - ABOUT LANDLORD) - see in ./image/example/landlord.png
-        landlord_data_container = ''
-        for script in script_elements:
-            if script.find('FrontEnd_Product_Details_ContactBox') != -1:
-                landlord_data_container = script
-                break
-        
-        # Set start from {  (see image to understand why)
-        landlord_text_start = landlord_data_container.index('window.FrontEnd_Product_Details_ContactBox')
-        landlord_text_start = landlord_data_container.find('{', landlord_text_start)
-        landlord_text_end = 0
-
-        landlord_container_from_first_curly_braces = landlord_data_container[landlord_text_start:]
-
-
-        # Try to find } close dict, use stack to find
-        array = [] # contain { } , as same as stack
-        for i in range(len(landlord_container_from_first_curly_braces)):
-            if landlord_container_from_first_curly_braces[i] == '{': 
-                array.append(landlord_container_from_first_curly_braces[i])
-            if landlord_container_from_first_curly_braces[i] == '}':
-                array.pop()
-                if len(array) == 0:
-                    landlord_text_end = i + 1
+            page_source = self.driver.page_source
+        # DATA IN SCRIPT ELEMENT (NOT SHOW IN UI - ABOUT PRODUCT) - see in ./image/example/undisplayed_data.png
+            # Get data inside all script elements
+            script_elements = self.get_data_safe('script[type="text/javascript"]', multi_value=True, attr='innerHTML') # script
+            undisplayed_data_container = '' # contain text inside script
+            for script in script_elements:
+                # If conditions is correct then that is element we need (only one exists)
+                if script.find('getListingRecommendationParams') != -1:
+                    undisplayed_data_container = script
                     break
 
-        landlord_in_curly_braces = landlord_container_from_first_curly_braces[0:landlord_text_end] 
+            # Position of the dict we need in type string (start - end)
+            undisplayed_text_start = 0
+            undisplayed_text_end = 0
 
-        # Error parseInt when change to dict, so erase it - see image to know where is it
-        landlord_in_curly_braces = re.sub(r'(parseInt\(("(\d+)")\))', r'\3', landlord_in_curly_braces)  
-
-        # Change to dict
-        landlord_info = string_to_dict(landlord_in_curly_braces)
-
-        # Get many key, but only some can be used
-        key_needed = ['nameSeller', 'emailSeller', 'userId']
-        landlord_needed_info = {key: value for key, value in landlord_info.items() if key in key_needed}
-
-    # DATA SHOW IN UI (everything you see when open website - ABOUT PRODUCT)
-        displayed_data_container = {}
-
-        # Link of post
-        displayed_data_container['Link'] = link
-        # Title of post
-        displayed_data_container['Title'] = get_data_safe(scope_element, '.re__pr-title.pr-title.js__pr-title', return_text=True)
-        # Address
-        displayed_data_container['Address'] = get_data_safe(scope_element, '.re__pr-short-description.js__pr-address', return_text=True)
-        # Vertified from batdongsan
-        displayed_data_container['Verified'] = get_data_safe(scope_element, '.re__pr-stick-listing-verified') or None
-        # Image links - string
-        img_links = get_data_safe(scope_element, '.re__media-thumb-item.js__media-thumbs-item > img', multi_value=True, attr='src')
-        displayed_data_container['Images'] = ','.join(img_links)
-
-        # Example in ./image/example/a.png
-        a = get_data_safe(scope_element, '.re__pr-short-info-item.js__pr-short-info-item', multi_value=True)
-        for couple in a:
-            key = get_data_safe(couple, '.title', return_text=True)
-            if not key: continue # if not exists then passs
-
-            value = get_data_safe(couple, '.value', return_text=True)
-            # Some post have ext info below
-            ext = get_data_safe(couple, '.ext', return_text=True)
+            # You can see picture to know why
+            for i in range(len(undisplayed_data_container)):
+                # get nearest {
+                if undisplayed_data_container[i] == '{': 
+                    undisplayed_text_start = i
+                # get first }
+                if undisplayed_data_container[i] == '}':
+                    undisplayed_text_end = i
+                    break
             
-            displayed_data_container[key] = value
-            displayed_data_container[key + ' ' + 'ext'] = ext
+            # Get dict but in type string
+            undisplayed_in_curly_braces = undisplayed_data_container[undisplayed_text_start:(undisplayed_text_end + 1)]
+            # Change to dict
+            undisplayed_info = string_to_dict(undisplayed_in_curly_braces)
 
-        displayed_data_container['Detail'] = get_data_safe(scope_element, '.re__detail-content', return_text=True)
 
-        # Example in ./image/example/b.png
-        b = get_data_safe(scope_element, '.re__pr-specs-content-item', multi_value=True)
-        for couple in b:
-            key = get_data_safe(couple, '.re__pr-specs-content-item-title', return_text=True)
-            if not key: continue # if not exists then passs
+        # DATA IN SCRIPT ELEMEMENT (CAN SHOW SOME IN UI - ABOUT LANDLORD) - see in ./image/example/landlord.png
+            landlord_data_container = ''
+            for script in script_elements:
+                if script.find('FrontEnd_Product_Details_ContactBox') != -1:
+                    landlord_data_container = script
+                    break
+            
+            # Set start from {  (see image to understand why)
+            landlord_text_start = landlord_data_container.index('window.FrontEnd_Product_Details_ContactBox')
+            landlord_text_start = landlord_data_container.find('{', landlord_text_start)
+            landlord_text_end = 0
 
-            value = get_data_safe(couple, '.re__pr-specs-content-item-value', return_text=True)
+            landlord_container_from_first_curly_braces = landlord_data_container[landlord_text_start:]
 
-            displayed_data_container[key] = value        
 
-        # Example in ./image/example/c.png
-        c = get_data_safe(scope_element, '.re__pr-short-info-item.js__pr-config-item', multi_value=True)
-        for couple in c:
-            key = get_data_safe(couple, '.title', return_text=True)
-            if not key: continue # if not exists then passs
+            # Try to find } close dict, use stack to find
+            array = [] # contain { } , as same as stack
+            for i in range(len(landlord_container_from_first_curly_braces)):
+                if landlord_container_from_first_curly_braces[i] == '{': 
+                    array.append(landlord_container_from_first_curly_braces[i])
+                if landlord_container_from_first_curly_braces[i] == '}':
+                    array.pop()
+                    if len(array) == 0:
+                        landlord_text_end = i + 1
+                        break
 
-            value = get_data_safe(couple, '.value', return_text=True)
+            landlord_in_curly_braces = landlord_container_from_first_curly_braces[0:landlord_text_end] 
 
-            displayed_data_container[key] = value    
+            # Error parseInt when change to dict, so erase it - see image to know where is it
+            landlord_in_curly_braces = re.sub(r'(parseInt\(("(\d+)")\))', r'\3', landlord_in_curly_braces)  
 
-    # TIME CRAWL THIS POST
-        # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
-        # Example of ISO Format: 2021-07-27T16:02:08.070557
-        now = {
-            'time_scraping': datetime.now().isoformat()
-        }
+            # Change to dict
+            landlord_info = string_to_dict(landlord_in_curly_braces)
 
-        full_data = {}
-        full_data.update(undisplayed_info)
-        full_data.update(landlord_needed_info)
-        full_data.update(displayed_data_container)
-        full_data.update(now)
+            # Get many key, but only some can be used
+            key_needed = ['nameSeller', 'emailSeller', 'userId']
+            landlord_needed_info = {key: value for key, value in landlord_info.items() if key in key_needed}
 
-        data = {
-            'data': full_data,
-            'page_source': page_source
-        }
+        # DATA SHOW IN UI (everything you see when open website - ABOUT PRODUCT)
+            displayed_data_container = {}
 
-        return data
+            # Link of post
+            displayed_data_container['Link'] = link
+            # Title of post
+            displayed_data_container['Title'] = self.get_data_safe('.re__pr-title.pr-title.js__pr-title', return_text=True)
+            # Address
+            displayed_data_container['Address'] = self.get_data_safe('.re__pr-short-description.js__pr-address', return_text=True)
+            # Vertified from batdongsan
+            displayed_data_container['Verified'] = self.get_data_safe('.re__pr-stick-listing-verified') or None
+            # Image links - string
+            img_links = self.get_data_safe('.re__media-thumb-item.js__media-thumbs-item > img', multi_value=True, attr='src')
+            displayed_data_container['Images'] = ','.join(img_links)
 
-    except:
-        scope_element.close()
-        
-        if try_again <= 5:
-            print_banner_colored(style='danger')
-            return get_data_in_link(get_new_driver(), link, try_again + 1)
-        else:
-            raise ValueError("Can't get data from this page for some reason!!!!")
-        
-def crawl(base_link):
-    while True:
-        with open('./working_with_file/save_data/previous_crawl.txt', 'r') as file:
-            page_num, link_num = map(int, file.read().splitlines())
+            # Example in ./image/example/a.png
+            a = self.get_data_safe('.re__pr-short-info-item.js__pr-short-info-item', multi_value=True)
+            for couple in a:
+                key = self.get_data_safe('.title', scope_element=couple, return_text=True)
+                if not key: continue # if not exists then passs
 
-        all_links = get_all_links_in_page(base_link, page_num)
-        
-        driver = get_new_driver()
-
-        for index, link in enumerate(all_links):
-            if index >= link_num: 
-                data = get_data_in_link(driver, link, index)
-
-                # Save data (data normal and page source)
-                save_data(data)
+                value = self.get_data_safe('.value', scope_element=couple, return_text=True)
+                # Some post have ext info below
+                ext = self.get_data_safe('.ext', scope_element=couple, return_text=True)
                 
-                # If success then change file previous_crawl.txt to next post
-                save_change_page_link_num(page_num, index + 1)
+                displayed_data_container[key] = value
+                displayed_data_container[key + ' ' + 'ext'] = ext
 
-                print_banner_colored(style='success')
-        
-        # If crawl all link then change file previous_crawl.txt to next page and reset link_num to 0
-        save_change_page_link_num(page_num + 1, 0)
+            displayed_data_container['Detail'] = self.get_data_safe('.re__detail-content', return_text=True)
+
+            # Example in ./image/example/b.png
+            b = self.get_data_safe('.re__pr-specs-content-item', multi_value=True)
+            for couple in b:
+                key = self.get_data_safe('.re__pr-specs-content-item-title', scope_element=couple, return_text=True)
+                if not key: continue # if not exists then passs
+
+                value = self.get_data_safe('.re__pr-specs-content-item-value', scope_element=couple, return_text=True)
+
+                displayed_data_container[key] = value        
+
+            # Example in ./image/example/c.png
+            c = self.get_data_safe('.re__pr-short-info-item.js__pr-config-item', multi_value=True)
+            for couple in c:
+                key = self.get_data_safe('.title', scope_element=couple, return_text=True)
+                if not key: continue # if not exists then passs
+
+                value = self.get_data_safe('.value', scope_element=couple, return_text=True)
+
+                displayed_data_container[key] = value    
+
+        # TIME CRAWL THIS POST
+            # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
+            # Example of ISO Format: 2021-07-27T16:02:08.070557
+            now = {
+                'time_scraping': datetime.now().isoformat()
+            }
+
+            full_data = {}
+            full_data.update(undisplayed_info)
+            full_data.update(landlord_needed_info)
+            full_data.update(displayed_data_container)
+            full_data.update(now)
+
+            data = {
+                'data': full_data,
+                'page_source': page_source
+            }
+
+            return data
+
+        except:            
+            if try_again <= 5:
+                print_banner_colored(style='danger')
+
+                self.driver.quit()
+                self.driver = get_new_driver()
+
+                return self.get_data_in_link(link, try_again=(try_again + 1))
+            else:
+                raise ValueError("Can't get data from this page for some reason!!!!")
+    
+    def save_change_page_link_num(self, page_num, link_num):
+        path = Path('./working_with_file/save_data/previous_crawl.txt')
+
+        self.__page_num = page_num
+        self.__link_num = link_num
+
+        with open(path, 'w') as file:
+            file.write(f'{self.__page_num}\n{self.__link_num}')
+
+        print_banner_colored(style='success')
+    
+    def quit_current_driver(self):
+        self.driver.quit()
+            
+    def crawl(self):
+        while True:
+            all_links = self.get_all_links_in_page()
+            
+            for index, link in enumerate(all_links):
+                if index >= self.__link_num: 
+                    data = self.get_data_in_link(link)
+
+                    # Save data (data normal and page source)
+                    save_data(data)
+                    
+                    # If success then change file previous_crawl.txt to next post
+                    self.save_change_page_link_num(self.__page_num, self.__link_num + 1)
+            
+            # If crawl all link then change file previous_crawl.txt to next page and reset link_num to 0
+            self.save_change_page_link_num(self.__page_num + 1, 0)
