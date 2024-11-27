@@ -2,6 +2,9 @@ from pathlib import Path
 import random
 import time
 import re
+import json
+import pprint
+import threading
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.proxy import Proxy, ProxyType
@@ -54,21 +57,85 @@ def get_link_page(base_link, page_num):
         return base_link
     else: 
         return f'{base_link}/p{page_num}'
+
+def get_pos_start_crawl():
+    previous_multi_crawl_path = Path('./working_with_file/save_data/previous_multi_crawl.json')
+    previous_crawl = None
+
+    try:
+        with open(previous_multi_crawl_path, 'r') as file:
+            previous_crawl = json.load(file)
+    except:
+        with open(previous_multi_crawl_path, 'w') as file:
+            page_default = 1
+            link_default = 0
+
+            previous_crawl = {   
+                'next_page': page_default + 1,
+                'running_thread': [
+                    {
+                        "page": page_default,
+                        "link": link_default,
+                        "isCrawling": True
+                    }
+                ]
+            }
+
+            json.dump(previous_crawl, file)
+            return [1, 0]
+    
+    for index, item in enumerate(previous_crawl['running_thread']):
+        if not item['isCrawling']:
+            page_num = item['page']
+            link_num = item['link']
+
+            previous_crawl['running_thread'][index]['isCrawling'] = True
+
+            with open(previous_multi_crawl_path, 'w') as file:
+                json.dump(previous_crawl, file)
+
+            print("Start to get: ", previous_crawl)
+
+            return [page_num, link_num]
+    
+    # If not have any False
+
+    new_page_crawling = {
+        'page': previous_crawl['next_page'],
+        'link': 0,
+        'isCrawling': True
+    }
+
+    new_crawl = {
+        'next_page': previous_crawl['next_page'] + 1,
+        'running_thread': [
+            *previous_crawl['running_thread'],
+            new_page_crawling
+        ]
+    }
+
+    with open(previous_multi_crawl_path, 'w') as file:
+        json.dump(new_crawl, file)
+
+    return [new_page_crawling['page'], new_page_crawling['link']]
     
 class Crawl:
     __base_link = None
     __page_num = None
     __link_num = None
     __driver_num = None
+    __lock_data = None
+    __lock_previous_crawl = None
 
-    def __init__(self, base_link, driver_num):
-        self.__driver_num = driver_num
+    def __init__(self, base_link, driver_num, lock_data = None, lock_previous_crawl = None):
         self.__base_link = base_link
+        self.__driver_num = driver_num
         self.driver = get_new_driver(self.__driver_num)
+        self.__lock_data = lock_data
+        self.__lock_previous_crawl = lock_previous_crawl
 
-        with open('./working_with_file/save_data/previous_crawl.txt', 'r') as file:
-                self.__page_num, self.__link_num = map(int, file.read().splitlines())
-
+        # Get pos .....
+        self.__page_num, self.__link_num = get_pos_start_crawl()
 
     def get_data_safe(self, text_selector, scope_element = None, multi_value = False, return_text = False, attr = ''):
         scope_element = scope_element or self.driver
@@ -101,6 +168,9 @@ class Crawl:
 
         if not try_again:
             print_banner_colored(f"LẤY TẤT CẢ LINK CỦA TRANG {page}", 'big')
+        else:
+            self.quit_current_driver()
+            self.driver = get_new_driver(self.__driver_num)
 
         try: 
             self.driver.get(get_link_page(self.__base_link, page))
@@ -110,15 +180,12 @@ class Crawl:
             if not len(all_links): 
                 raise ValueError("No links found!!!!")
             else:
-                print_banner_colored(style='success')
+                print_banner_colored(title=f'(PAGE {page})', style='success')
                 return all_links
             
         except:
             if try_again < 5:
-                print_banner_colored(style='danger')
-
-                self.quit_current_driver()
-                self.driver = get_new_driver(self.__driver_num)
+                print_banner_colored(title=f'(PAGE {page})', style='danger')
 
                 return self.get_all_links_in_page(try_again=(try_again + 1))
             else:
@@ -129,7 +196,10 @@ class Crawl:
         time.sleep(3)
 
         if not try_again:
-            print_banner_colored(f"LẤY DỮ LIỆU CỦA BÀI POST {self.__link_num}", 'small')
+            print_banner_colored(f"LẤY DỮ LIỆU CỦA BÀI POST {self.__link_num} CỦA PAGE {self.__page_num}", 'small')
+        else:
+            self.quit_current_driver()
+            self.driver = get_new_driver(self.__driver_num)
 
         try:
             # Start to get open link
@@ -165,6 +235,7 @@ class Crawl:
             undisplayed_in_curly_braces = undisplayed_data_container[undisplayed_text_start:(undisplayed_text_end + 1)]
             # Change to dict
             undisplayed_info = string_to_dict(undisplayed_in_curly_braces)
+            # print(undisplayed_info)
 
 
         # DATA IN SCRIPT ELEMEMENT (CAN SHOW SOME IN UI - ABOUT LANDLORD) - see in ./image/example/landlord.png
@@ -204,6 +275,7 @@ class Crawl:
             # Get many key, but only some can be used
             key_needed = ['nameSeller', 'emailSeller', 'userId']
             landlord_needed_info = {key: value for key, value in landlord_info.items() if key in key_needed}
+            # print(landlord_needed_info)
 
         # DATA SHOW IN UI (everything you see when open website - ABOUT PRODUCT)
             displayed_data_container = {}
@@ -254,6 +326,7 @@ class Crawl:
                 value = self.get_data_safe('.value', scope_element=couple, return_text=True)
 
                 displayed_data_container[key] = value    
+            # print(displayed_data_container)
 
         # TIME CRAWL THIS POST
             # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
@@ -261,6 +334,8 @@ class Crawl:
             now = {
                 'time_scraping': datetime.now().isoformat()
             }
+
+            # print(now)
 
             full_data = {}
             full_data.update(undisplayed_info)
@@ -277,42 +352,68 @@ class Crawl:
 
         except:            
             if try_again <= 5:
-                print_banner_colored(style='danger')
-
-                self.quit_current_driver()
-                self.driver = get_new_driver(self.__driver_num)
+                print_banner_colored(title=f'(PAGE {self.__page_num}) - (LINK {self.__link_num})', style='danger')
 
                 return self.get_data_in_link(link, try_again=(try_again + 1))
             else:
                 raise ValueError("Can't get data from this page for some reason!!!!")
     
-    def save_change_page_link_num(self, page_num, link_num):
-        path = Path('./working_with_file/save_data/previous_crawl.txt')
+    def save_change_page_link_num(self, page_num, link_num, value_to_stop):
+        previous_multi_crawl_path = Path('./working_with_file/save_data/previous_multi_crawl.json')
 
-        self.__page_num = page_num
-        self.__link_num = link_num
+        with open(previous_multi_crawl_path, 'r') as file:
+            multi_crawl_change = json.load(file)
+        print("CURRENT : ", multi_crawl_change)
 
-        with open(path, 'w') as file:
-            file.write(f'{self.__page_num}\n{self.__link_num}')
+        for index, item in enumerate(multi_crawl_change['running_thread']):
+            if item['page'] == page_num:
+                if link_num == value_to_stop:
+                    self.__page_num = multi_crawl_change['next_page']
+                    self.__link_num = 0
 
-        print_banner_colored(style='success')
-    
+                    multi_crawl_change['next_page'] += 1
+                    multi_crawl_change['running_thread'][index]['page'] = self.__page_num
+                    multi_crawl_change['running_thread'][index]['link'] = self.__link_num
+                else:
+                    self.__link_num = link_num
+
+                    multi_crawl_change['running_thread'][index]['link'] = self.__link_num
+
+                break
+
+        print("NEXT POST INFO : ", multi_crawl_change)
+        with open(previous_multi_crawl_path, 'w') as file:
+            json.dump(multi_crawl_change, file)
+
+        print_banner_colored(title=f'(PAGE {page_num}) - (LINK {link_num - 1})', style='success')
+
+
     def quit_current_driver(self):
         self.driver.quit()
             
     def crawl(self):
         while True:
             all_links = self.get_all_links_in_page()
-            
-            for index, link in enumerate(all_links):
-                if index >= self.__link_num: 
-                    data = self.get_data_in_link(link)
+            count_link = len(all_links)
 
-                    # Save data (data normal and page source)
-                    save_data(data)
-                    
-                    # If success then change file previous_crawl.txt to next post
-                    self.save_change_page_link_num(self.__page_num, self.__link_num + 1)
-            
-            # If crawl all link then change file previous_crawl.txt to next page and reset link_num to 0
-            self.save_change_page_link_num(self.__page_num + 1, 0)
+            for index in range(self.__link_num, count_link):
+                data = self.get_data_in_link(all_links[index])
+
+                # Save data (data normal and page source)
+                save_data(data)
+                print("CURRENT INDEX OF LINK WHEN CRAWL: ", index)
+                # If success then change file previous_crawl.txt to next post
+                self.save_change_page_link_num(self.__page_num, self.__link_num + 1, count_link)
+
+class MultiCrawl:
+    def __init__(self, base_link, count_driver): 
+        self.__base_link = base_link
+        self.__count_driver = count_driver
+        self.__lock_data = threading.Lock()
+        self.__lock_previous_crawl = threading.Lock()
+
+    def crawl(self):
+        for i in range(self.__count_driver):
+            single_crawl = Crawl(self.__base_link, i + 1)
+            thread = threading.Thread(target=single_crawl.crawl)
+            thread.start()
