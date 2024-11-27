@@ -4,13 +4,12 @@ import time
 import re
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.service import Service
 from selenium.webdriver.common.proxy import Proxy, ProxyType
-from webdriver_manager.chrome import ChromeDriverManager
 from global_variable.variable_file_reader import proxies_list
 from crawl_data.support_func import string_to_dict, print_banner_colored
 from datetime import datetime
 from working_with_file.file_func import save_data
+from selenium.webdriver.chrome.service import Service
 
 def get_proxy_random(proxies_list_custom = None): 
     # If not have custom, get global value
@@ -21,15 +20,16 @@ def get_proxy_random(proxies_list_custom = None):
     proxy = Proxy({
         'proxyType': ProxyType.MANUAL,
         'httpProxy': proxies[proxy_stt],
-        'sslProxy': proxies[proxy_stt]
+        # 'sslProxy': proxies[proxy_stt]
     })
 
     return proxy
 
-def get_new_driver(chorme_options_custom = None):
+def get_new_driver(driver_num = 1, chorme_options_custom = None):
     # If not have custom then use default self-config
     chrome_options = chorme_options_custom or webdriver.ChromeOptions()
-    # chrome_service = Service(ChromeDriverManager().install())
+    # chrome_service = Service('/Users/hoangvinh/OneDrive/Workspace/Support/Driver/chrome-headless-shell-mac-x64/chrome-headless-shell')
+    chrome_service = Service(f'/Users/hoangvinh/OneDrive/Workspace/Support/Driver/chromedriver-mac-x64_{str(driver_num)}/chromedriver')
 
     if not chorme_options_custom:
         chrome_options.add_argument("--start-maximized")
@@ -42,7 +42,7 @@ def get_new_driver(chorme_options_custom = None):
         # user_agent_string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
         # chrome_options.add_argument(f"user-agent={user_agent_string}")
 
-    driver = webdriver.Chrome(options=chrome_options)
+    driver = webdriver.Chrome(options=chrome_options, service=chrome_service)
     # driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
     driver.implicitly_wait(5)
 
@@ -55,22 +55,23 @@ def get_link_page(base_link, page_num):
     else: 
         return f'{base_link}/p{page_num}'
     
-class Crawl():
+class Crawl:
     __base_link = None
     __page_num = None
     __link_num = None
-    driver = None
+    __driver_num = None
 
-    def __init__(self, base_link):
-        self.driver = get_new_driver()
+    def __init__(self, base_link, driver_num):
+        self.__driver_num = driver_num
         self.__base_link = base_link
+        self.driver = get_new_driver(self.__driver_num)
 
         with open('./working_with_file/save_data/previous_crawl.txt', 'r') as file:
                 self.__page_num, self.__link_num = map(int, file.read().splitlines())
 
+
     def get_data_safe(self, text_selector, scope_element = None, multi_value = False, return_text = False, attr = ''):
         scope_element = scope_element or self.driver
-        
         try:
             if multi_value:
                 elements = scope_element.find_elements(By.CSS_SELECTOR, value = text_selector)
@@ -93,17 +94,15 @@ class Crawl():
         except:
             return None
 
+
     def get_all_links_in_page(self, page = None, try_again = 0):
-        time.sleep(2)
+        time.sleep(3)
         page = page or self.__page_num
 
         if not try_again:
             print_banner_colored(f"LẤY TẤT CẢ LINK CỦA TRANG {page}", 'big')
 
         try: 
-            self.quit_current_driver()
-            self.driver = get_new_driver()
-
             self.driver.get(get_link_page(self.__base_link, page))
 
             all_links = self.get_data_safe('.js__card.js__card-full-web > .js__product-link-for-product-id', multi_value=True, attr='href')
@@ -117,13 +116,17 @@ class Crawl():
         except:
             if try_again < 5:
                 print_banner_colored(style='danger')
+
+                self.quit_current_driver()
+                self.driver = get_new_driver(self.__driver_num)
+
                 return self.get_all_links_in_page(try_again=(try_again + 1))
             else:
                 raise ValueError("Need to get again, can't get this page!!!!")
             
 
     def get_data_in_link(self, link, try_again = 0):
-        time.sleep(2)
+        time.sleep(3)
 
         if not try_again:
             print_banner_colored(f"LẤY DỮ LIỆU CỦA BÀI POST {self.__link_num}", 'small')
@@ -131,7 +134,7 @@ class Crawl():
         try:
             # Start to get open link
             self.driver.get(link)
-            time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
+            # time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
 
             page_source = self.driver.page_source
         # DATA IN SCRIPT ELEMENT (NOT SHOW IN UI - ABOUT PRODUCT) - see in ./image/example/undisplayed_data.png
@@ -276,8 +279,8 @@ class Crawl():
             if try_again <= 5:
                 print_banner_colored(style='danger')
 
-                self.driver.quit()
-                self.driver = get_new_driver()
+                self.quit_current_driver()
+                self.driver = get_new_driver(self.__driver_num)
 
                 return self.get_data_in_link(link, try_again=(try_again + 1))
             else:

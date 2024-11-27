@@ -4,7 +4,7 @@ import time
 # Cần chỉnh sửa cho từng error như timeout, privacy, ...
 
 if __name__ == '__main__':
-    base = 'https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
+    base = 'http://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
     
-    run = Crawl(base)
+    run = Crawl(base, 1)
     run.crawl()
