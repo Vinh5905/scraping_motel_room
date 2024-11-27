@@ -6,13 +6,14 @@ import json
 import pprint
 import threading
 from selenium import webdriver
+from datetime import datetime
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.proxy import Proxy, ProxyType
-from global_variable.variable_file_reader import proxies_list
-from crawl_data.support_func import string_to_dict, print_banner_colored
-from datetime import datetime
-from working_with_file.file_func import save_data
 from selenium.webdriver.chrome.service import Service
+from crawl_data.support_func import string_to_dict, print_banner_colored
+from global_variable.variable_file_reader import proxies_list
+from global_variable.variable_static import lock_data, lock_previous_crawl
+from working_with_file.file_func import save_data
 
 def get_proxy_random(proxies_list_custom = None): 
     # If not have custom, get global value
@@ -94,8 +95,6 @@ def get_pos_start_crawl():
             with open(previous_multi_crawl_path, 'w') as file:
                 json.dump(previous_crawl, file)
 
-            print("Start to get: ", previous_crawl)
-
             return [page_num, link_num]
     
     # If not have any False
@@ -124,18 +123,15 @@ class Crawl:
     __page_num = None
     __link_num = None
     __driver_num = None
-    __lock_data = None
-    __lock_previous_crawl = None
 
-    def __init__(self, base_link, driver_num, lock_data = None, lock_previous_crawl = None):
+    def __init__(self, base_link, driver_num = 1):
         self.__base_link = base_link
         self.__driver_num = driver_num
         self.driver = get_new_driver(self.__driver_num)
-        self.__lock_data = lock_data
-        self.__lock_previous_crawl = lock_previous_crawl
 
         # Get pos .....
-        self.__page_num, self.__link_num = get_pos_start_crawl()
+        with lock_previous_crawl:
+            self.__page_num, self.__link_num = get_pos_start_crawl()
 
     def get_data_safe(self, text_selector, scope_element = None, multi_value = False, return_text = False, attr = ''):
         scope_element = scope_element or self.driver
@@ -361,9 +357,9 @@ class Crawl:
     def save_change_page_link_num(self, page_num, link_num, value_to_stop):
         previous_multi_crawl_path = Path('./working_with_file/save_data/previous_multi_crawl.json')
 
-        with open(previous_multi_crawl_path, 'r') as file:
-            multi_crawl_change = json.load(file)
-        print("CURRENT : ", multi_crawl_change)
+        with lock_previous_crawl:
+            with open(previous_multi_crawl_path, 'r') as file:
+                multi_crawl_change = json.load(file)
 
         for index, item in enumerate(multi_crawl_change['running_thread']):
             if item['page'] == page_num:
@@ -381,9 +377,9 @@ class Crawl:
 
                 break
 
-        print("NEXT POST INFO : ", multi_crawl_change)
-        with open(previous_multi_crawl_path, 'w') as file:
-            json.dump(multi_crawl_change, file)
+        with lock_previous_crawl:
+            with open(previous_multi_crawl_path, 'w') as file:
+                json.dump(multi_crawl_change, file)
 
         print_banner_colored(title=f'(PAGE {page_num}) - (LINK {link_num - 1})', style='success')
 
@@ -400,8 +396,8 @@ class Crawl:
                 data = self.get_data_in_link(all_links[index])
 
                 # Save data (data normal and page source)
-                save_data(data)
-                print("CURRENT INDEX OF LINK WHEN CRAWL: ", index)
+                with lock_data: 
+                    save_data(data)
                 # If success then change file previous_crawl.txt to next post
                 self.save_change_page_link_num(self.__page_num, self.__link_num + 1, count_link)
 
@@ -409,8 +405,6 @@ class MultiCrawl:
     def __init__(self, base_link, count_driver): 
         self.__base_link = base_link
         self.__count_driver = count_driver
-        self.__lock_data = threading.Lock()
-        self.__lock_previous_crawl = threading.Lock()
 
     def crawl(self):
         for i in range(self.__count_driver):
