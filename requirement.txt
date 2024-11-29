@@ -2,3 +2,4 @@ selenium
 requests
 colorama
 webdriver-manager
+beautifulsoup4

@@ -1,6 +1,7 @@
 from crawl_data.crawl_func import MultiCrawl, Crawl
 from crawl_data.support_func import reset_previous_crawl
 import time
+from pathlib import Path
 
 '''
 - Multiple:
@@ -42,3 +43,4 @@ if __name__ == '__main__':
 
     # run = Crawl(base)
     # run.crawl()
+    

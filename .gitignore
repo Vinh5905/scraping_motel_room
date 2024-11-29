@@ -4,6 +4,8 @@ test.py
 
 **/__pycache__/
 
-working_with_file/save_data/data.json
+working_with_file/save_data/data
 
-working_with_file/save_data/page_source.json
+main_chotot.py
+
+check_page_source/formatted.html

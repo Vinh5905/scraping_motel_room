@@ -58,7 +58,7 @@ def string_to_dict(text: str):
     return value_dict_type
 
 def reset_previous_crawl():
-    previous_multi_crawl_path = Path('./working_with_file/save_data/previous_multi_crawl.json')
+    previous_multi_crawl_path = Path('./working_with_file/save_data/previous_crawl_info.json')
 
     try:
         with open(previous_multi_crawl_path, 'r') as file:
