@@ -1,123 +1,16 @@
-from pathlib import Path
-import random
-import time
-import re
-import json
-import pprint
-import threading
 from datetime import datetime
-from selenium import webdriver
+import time
+import json
+import re
+import threading
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.proxy import Proxy, ProxyType
-from selenium.webdriver.chrome.service import Service
-from crawl_data.support_func import string_to_dict, print_banner_colored
-from global_variable.variable_file_reader import proxies_list
-from global_variable.variable_static import lock_data, lock_previous_crawl
-from working_with_file.file_func import save_page_source
+from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled
+from shared.colorful import print_banner_colored
+from shared.globals import LOCK_DATA, LOCK_PREVIOUS_CRAWL, LOCK_LINK_LIST, CHECKPOINTS_PATH
+from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
 
-def get_proxy_random(proxies_list_custom = None): 
-    # If not have custom, get global value
-    proxies = proxies_list_custom or proxies_list
+# Wait cho ảnh hiện hết lên rồi mới lấy đượcc
 
-    proxy_stt = random.randrange(0, len(proxies))
-
-    proxy = Proxy({
-        'proxyType': ProxyType.MANUAL,
-        'httpProxy': proxies[proxy_stt],
-        # 'sslProxy': proxies[proxy_stt]
-    })
-
-    return proxy
-
-def get_new_driver(driver_num = 1, chorme_options_custom = None):
-    # If not have custom then use default self-config
-    chrome_options = chorme_options_custom or webdriver.ChromeOptions()
-    # chrome_service = Service('/Users/hoangvinh/OneDrive/Workspace/Support/Driver/chrome-headless-shell-mac-x64/chrome-headless-shell')
-    chrome_service = Service(f'/Users/hoangvinh/OneDrive/Workspace/Support/Driver/chromedriver-mac-x64_{str(driver_num)}/chromedriver')
-
-    if not chorme_options_custom:
-        chrome_options.add_argument("--start-maximized")
-        # chrome_options.add_argument('--ignore-ssl-errors=yes')
-        # chrome_options.add_argument('--ignore-certificate-errors')
-        # chrome_options.add_argument('--headless')
-        # chrome_options.add_argument("--incognito")
-        chrome_options.proxy = get_proxy_random()
-
-        # user_agent_string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
-        # chrome_options.add_argument(f"user-agent={user_agent_string}")
-
-    driver = webdriver.Chrome(options=chrome_options, service=chrome_service)
-    # driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
-    driver.implicitly_wait(5)
-
-    return driver
-
-def get_link_page(base_link, page_num):
-    if page_num == 1: 
-        # Keep origin because page 1 is as same as base link
-        return base_link
-    else: 
-        return f'{base_link}/p{page_num}'
-
-def get_pos_start_crawl():
-    path_previous_crawl = Path('./working_with_file/save_data/previous_crawl_info.json')
-    previous_crawl = None
-
-    try:
-        with open(path_previous_crawl, 'r') as file:
-            previous_crawl = json.load(file)
-    except:
-        with open(path_previous_crawl, 'w') as file:
-            page_default = 1
-            link_default = 0
-
-            previous_crawl = {   
-                'next_page': page_default + 1,
-                'running_thread': [
-                    {
-                        "page": page_default,
-                        "link": link_default,
-                        "isCrawling": True
-                    }
-                ]
-            }
-
-            json.dump(previous_crawl, file)
-            return [1, 0]
-    
-    for index, item in enumerate(previous_crawl['running_thread']):
-        if not item['isCrawling']:
-            page_num = item['page']
-            link_num = item['link']
-
-            previous_crawl['running_thread'][index]['isCrawling'] = True
-
-            with open(path_previous_crawl, 'w') as file:
-                json.dump(previous_crawl, file)
-
-            return [page_num, link_num]
-    
-    # If not have any False
-
-    new_page_crawling = {
-        'page': previous_crawl['next_page'],
-        'link': 0,
-        'isCrawling': True
-    }
-
-    new_crawl = {
-        'next_page': previous_crawl['next_page'] + 1,
-        'running_thread': [
-            *previous_crawl['running_thread'],
-            new_page_crawling
-        ]
-    }
-
-    with open(path_previous_crawl, 'w') as file:
-        json.dump(new_crawl, file)
-
-    return [new_page_crawling['page'], new_page_crawling['link']]
-    
 class Crawl:
     __base_link = None
     __page_num = None
@@ -130,7 +23,7 @@ class Crawl:
         self.driver = get_new_driver(self.__driver_num)
 
         # Get pos .....
-        with lock_previous_crawl:
+        with LOCK_PREVIOUS_CRAWL:
             self.__page_num, self.__link_num = get_pos_start_crawl()
 
     def get_data_safe(self, text_selector, scope_element = None, multi_value = False, return_text = False, attr = ''):
@@ -160,16 +53,21 @@ class Crawl:
 
     def get_all_links_in_page(self, page = None, try_again = 0):
         time.sleep(3)
+        print("START TO GET PAGE")
+
         page = page or self.__page_num
 
         if not try_again:
             print_banner_colored(f"LẤY TẤT CẢ LINK CỦA TRANG {page}", 'big')
-        else:
-            self.quit_current_driver()
-            self.driver = get_new_driver(self.__driver_num)
+        # else:
+            # self.quit_current_driver()
+            # self.driver = get_new_driver(self.__driver_num)
 
         try: 
+            print("GET DRIVER")
             self.driver.get(get_link_page(self.__base_link, page))
+            if not is_login(self.driver):
+                change_cookies_driver(self.driver)
 
             all_links = self.get_data_safe('.js__card.js__card-full-web > .js__product-link-for-product-id', multi_value=True, attr='href')
 
@@ -180,6 +78,7 @@ class Crawl:
                 return all_links
             
         except:
+            print("ERROR SOMETHING SO RESTART RUNNING")
             if try_again < 5:
                 print_banner_colored(title=f'(PAGE {page})', style='danger')
 
@@ -193,25 +92,52 @@ class Crawl:
 
         if not try_again:
             print_banner_colored(f"LẤY DỮ LIỆU CỦA BÀI POST {self.__link_num} CỦA PAGE {self.__page_num}", 'small')
-        else:
-            self.quit_current_driver()
-            self.driver = get_new_driver(self.__driver_num)
+        # else:
+            # self.quit_current_driver()
+            # self.driver = get_new_driver(self.__driver_num)
+
+
         try:
             # Start to get open link
             self.driver.get(link)
             # time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
+            if not is_login(self.driver):
+                change_cookies_driver(self.driver)
 
+            phone_number_button_display = self.driver.find_element(By.CSS_SELECTOR, '.js__ob-agent-info + .js__ob-contact-info > .js__phone')
+            phone_number_button_display.click()
+
+            time.sleep(4)
+
+            # Page source
             page_source = self.driver.page_source
+
+            # Image
+            imgs = self.get_data_safe('.swiper-slide.js__media-item-container div.re__pr-image-cover', multi_value=True)
+            imgs = [img.get_attribute('style') or img.get_attribute('data-bg') for img in imgs]
+            for index in range(len(imgs)):
+                imgs[index] = re.sub(r'"', r"'", imgs[index])
+                imgs[index] = re.sub(r"[\s\S]+(url\('([\s\S]+)'\))[\s\S]*", r"\2", imgs[index])
+
+
+            # TIME CRAWL THIS POST
+                # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
+                # Example of ISO Format: 2021-07-27T16:02:08.070557
+            now = {
+                'time_scraping': datetime.now().isoformat()
+            }
 
             if not page_source:
                 raise ValueError("PAGE SOURCE NO VALUE ???")
 
             data = {
                 'link': link,
+                'time_crawling': now,
                 'page_source': page_source
             }
 
-            return data
+            print_banner_colored('Lấy xong dữ liệu từ url', 'success')
+            return (data, imgs)
 
         except:            
             if try_again <= 5:
@@ -219,13 +145,11 @@ class Crawl:
 
                 return self.get_data_in_link(link, try_again=(try_again + 1))
             else:
-                raise ValueError("Can't get data from this page for some reason!!!!")
+                raise ValueError("Can't get data from this page for some reason!!;!!")
     
-    def save_change_page_link_num(self, page_num, link_num, value_to_stop):
-        path_previous_crawl = Path('./working_with_file/save_data/previous_crawl_info.json')
-
-        with lock_previous_crawl:
-            with open(path_previous_crawl, 'r') as file:
+    def save_change_page_link_num(self, page_num, link_num, value_to_stop, exist=False):
+        with LOCK_PREVIOUS_CRAWL:
+            with open(CHECKPOINTS_PATH['CRAWL'], 'r') as file:
                 multi_crawl_change = json.load(file)
 
         for index, item in enumerate(multi_crawl_change['running_thread']):
@@ -253,11 +177,16 @@ class Crawl:
 
                 break
 
-        with lock_previous_crawl:
-            with open(path_previous_crawl, 'w') as file:
+        with LOCK_PREVIOUS_CRAWL:
+            with open(CHECKPOINTS_PATH['CRAWL'], 'w') as file:
                 json.dump(multi_crawl_change, file)
 
-        print_banner_colored(title=f'(PAGE {page_num}) - (LINK {link_num - 1})', style='success')
+            update_crawl_info()
+
+        if exist:
+            print_banner_colored(title=f'(PAGE {page_num}) - (LINK {link_num - 1})', style='exist')
+        else:
+            print_banner_colored(title=f'(PAGE {page_num}) - (LINK {link_num - 1})', style='success')
 
 
     def quit_current_driver(self):
@@ -269,14 +198,20 @@ class Crawl:
             count_link = len(all_links)
 
             for index in range(self.__link_num, count_link):
+                if is_crawled(all_links[index]):
+                    self.save_change_page_link_num(self.__page_num, self.__link_num + 1, count_link, exist=True)
+                    continue
+
                 data = self.get_data_in_link(all_links[index])
 
-                # Save data (data normal and page source)
-                with lock_data: 
-                    save_page_source(self.__page_num, data)
-                    # save_data(data)
+                # Save data
+                with LOCK_DATA: 
+                    save_page_source(self.__page_num, self.__link_num, data[0])
+                save_imgs(self.__page_num, self.__link_num, data[1])
                 # If success then change file previous_crawl.txt to next post
                 self.save_change_page_link_num(self.__page_num, self.__link_num + 1, count_link)
+
+
 
 class MultiCrawl:
     def __init__(self, base_link, count_driver): 

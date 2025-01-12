@@ -1,15 +1,13 @@
 import json
-import pprint
 import re
 import sys
 import time
-from pathlib import Path
 from bs4 import BeautifulSoup
 from datetime import datetime
-
-from crawl_data.support_func import string_to_dict
-from crawl_data.crawl_func import get_new_driver
-from crawl_data.support_func import print_banner_colored
+from shared.support_func import string_to_dict
+from crawl.crawl import get_new_driver
+from shared.colorful import print_banner_colored
+from shared.globals import CHECKPOINTS_PATH, SAVE_DATA_PATH
 
 def get_data_in_link(link, try_again = 0):
     time.sleep(3)
@@ -41,11 +39,8 @@ def get_data_in_link(link, try_again = 0):
 
 class Extract():
     def __init__(self):
-        path_previous_crawl = Path('./working_with_file/save_data/previous_crawl_info.json')
-        path_previous_extract = Path('./working_with_file/save_data/previous_extract_info.json')
-
         # Get max page can extract
-        with open(path_previous_crawl, 'r') as file:
+        with open(CHECKPOINTS_PATH['CRAWL'], 'r') as file:
             try:
                 info_crawl = json.load(file)
             except:
@@ -58,7 +53,7 @@ class Extract():
             if self.page_to_stop == 0:
                 raise ValueError("STILL NOT HAVE ANY PAGE CRAWL DONE !!")
         
-        with open(path_previous_extract, 'r') as file:
+        with open(CHECKPOINTS_PATH['EXTRACT'], 'r') as file:
             self.page_start = json.load(file)
 
 
@@ -217,21 +212,12 @@ class Extract():
             landlord_needed_info = {key: value for key, value in landlord_info.items() if key in key_needed}
 
             # pprint.pprint(landlord_info)
-
-        # TIME CRAWL THIS POST
-            # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
-            # Example of ISO Format: 2021-07-27T16:02:08.070557
-            now = {
-                'time_scraping': datetime.now().isoformat()
-            }
-
             # print(now)
 
             full_data = {}
             full_data.update(undisplayed_info)
             full_data.update(landlord_needed_info)
             full_data.update(displayed_data_container)
-            full_data.update(now)
 
             print_banner_colored(f'Link {index} success', 'success')
             return full_data
@@ -245,9 +231,8 @@ class Extract():
     def extract(self):
         for page in range(self.page_start, self.page_to_stop + 1):
             print_banner_colored(f'Extract data in page {page}', 'small')
-            path_to_page_source = Path(f'./working_with_file/save_data/data/page_{page}/page_source.json')
-            path_to_data = Path(f'./working_with_file/save_data/data/page_{page}/data.json')
-            path_previous_extract = Path('./working_with_file/save_data/previous_extract_info.json')
+            path_to_page_source = SAVE_DATA_PATH['PAGE_SOURCE'](page)
+            path_to_data = SAVE_DATA_PATH['DATA'](page)
 
             with open(path_to_page_source, 'r') as file:
                 all_page_source = json.load(file)
@@ -275,7 +260,7 @@ class Extract():
             with open(path_to_data, 'w') as file:
                 json.dump(all_data_extracted, file, ensure_ascii=False)
 
-            with open(path_previous_extract, 'w') as file:
+            with open(CHECKPOINTS_PATH['EXTRACT'], 'w') as file:
                 json.dump(page + 1, file, ensure_ascii=False)
 
 if __name__ == '__main__':

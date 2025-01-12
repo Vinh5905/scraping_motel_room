@@ -4,8 +4,14 @@ test.py
 
 **/__pycache__/
 
-working_with_file/save_data/data
+data/save_data/
+
+data/access_token/access_token.json
 
 main_chotot.py
 
 check_page_source/formatted.html
+
+.env
+
+TEST_ONEDRIVE
