@@ -1,6 +1,7 @@
 from selenium import webdriver
 from bs4 import BeautifulSoup
 from pathlib import Path
+from shared.globals import CHECK_FORMATTED_PAGE_SOURCE_PATH
 
 '''
 CHÚ Ý :
@@ -9,9 +10,7 @@ CHÚ Ý :
         - Chỉ sử dụng với các page product
 '''
 
-def format_html(link):
-    path_html = Path('./check_page_source/formatted.html')
-
+def format_html_link(link):
     # The website is possibly blocking or restricting the user agent for selenium. (sometime need)
     user_agent_string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
     chrome_options = webdriver.ChromeOptions()
@@ -31,11 +30,17 @@ def format_html(link):
     page_source_formatted = soup.prettify()
     # print("PRETTIFY DONE")
 
-    with open(path_html, 'w') as file:
-        # print("COME HERE TO OPEN FILE")
+    with open(CHECK_FORMATTED_PAGE_SOURCE_PATH, 'w') as file:
+        print("COME HERE TO OPEN FILE")
         file.write(page_source_formatted)
 
     driver.quit()
 
-if __name__ == '__main__':
-    format_html('https://www.nhatot.com/thue-phong-tro-quan-8-tp-ho-chi-minh/68268900.htm#px=SR-stickyad-[PO-1][PL-top]')
+def format_html_page_source(page_source):
+    soup = BeautifulSoup(page_source, 'html.parser')
+
+    page_source_formatted = soup.prettify()
+    # print("PRETTIFY DONE")
+
+    with open(CHECK_FORMATTED_PAGE_SOURCE_PATH, 'w') as file:
+        file.write(page_source_formatted)

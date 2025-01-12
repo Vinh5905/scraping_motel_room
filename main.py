@@ -1,7 +1,5 @@
-from crawl_data.crawl_func import MultiCrawl, Crawl
-from crawl_data.support_func import reset_previous_crawl
-import time
-from pathlib import Path
+from crawl.crawl import MultiCrawl, Crawl
+from shared.support_func import reset_previous_crawl
 
 '''
 - Multiple:
@@ -31,16 +29,16 @@ from pathlib import Path
         * Sau khi chạy xong hết đến 20 rồi thì tiếp tục từ next_page
         
         * Chạy xong mà bị end chương trình là isCrawl thành False hết.
-        
 '''
 
 if __name__ == '__main__':  
     base = 'http://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
     reset_previous_crawl()
 
-    run = MultiCrawl(base, 2)
+    run = MultiCrawl(base, 1)
     run.crawl()
 
     # run = Crawl(base)
     # run.crawl()
+    # run.get_data_in_link('https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-duong-pham-huu-lau-xa-phuoc-kieng/-2tr9-day-du-tien-nghi-noi-that-wc-chung-co-n-vien-ve-sinh-bep-camera-24-24-pr41376284')
     

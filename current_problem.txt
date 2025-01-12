@@ -1,0 +1,4 @@
+* Như a Khánh bảo thì cứ nên chạy all link trước xong tính đến cào từng cái trong đó sau
+* Sử dụng OpenVPN ẩn IP
+* Code phần download image về và lưu trữ trên OneDrive
+* Phần scraping xem lại vẫn khi crawl bị lỗi một số page (có khả năng do image k hiện theo hàng mà chỉ có 1 image hoặc không có)
