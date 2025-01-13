@@ -19,26 +19,33 @@ def decorator_access_token(func):
 
         APPLICATION_ID = os.getenv('APPLICATION_ID')
         CLIENT_SECRET = os.getenv('CLIENT_SECRET')
-        SCOPES = ['User.Read', 'Files.ReadWrite.All']
+        SCOPES = [
+            'User.Read', 
+            'Files.ReadWrite.All'
+        ]
 
         try:
             if try_again:
+                print('Start to get access token')
                 access_token = get_access_token(APPLICATION_ID, CLIENT_SECRET, SCOPES)
                 with open(ACCESS_TOKEN, 'w') as file:
                     json.dump({
                         'access_token': access_token
                     }, file)
             else:
-                with open(ACCESS_TOKEN, 'r') as file:
-                    access_token = json.load(file)
-                    access_token = access_token['access_token']
+                print('RUn here??')
+                try:
+                    with open(ACCESS_TOKEN, 'r') as file:
+                        access_token = json.load(file)
+                        access_token = access_token['access_token']
+                except:
+                    access_token = ''
 
             headers = {
                 'Authorization': 'Bearer ' + access_token
             }
 
             data = func(headers, *args, **kwargs)
-
             if not data:
                 raise ValueError('Khong tim thay data response')
             else:
@@ -47,17 +54,16 @@ def decorator_access_token(func):
                         data = data[1]
                     else:
                         raise ValueError('Khong tim thay data response')
-                
                 return data
 
         except requests.exceptions.HTTPError as http_err:
-            if http_err.response.status_code == 403:
+            if http_err.response.status_code == 401:
                 if try_again:
                     raise ValueError('Something wrong!!! (not by authorization)')
 
                 print('Try to get access token again!!!')
                 time.sleep(2)
-                wrapper(*args, try_again=True, **kwargs)
+                return wrapper(*args, try_again=True, **kwargs)
             else:
                 raise
         except Exception as e:
@@ -209,7 +215,8 @@ def get_access_token_for_current():
     return access_token
 
 # print(get_access_token_for_current())
-# print(upload_img())
+dotenv.load_dotenv()
+print(list_folder_children(folder_id=os.getenv('FOLDER_FRAUD_DETECTION_ID')))
 '''
 https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094536-e507_wm.jpg
 https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094541-cc2f_wm.jpg
