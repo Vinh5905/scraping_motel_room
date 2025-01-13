@@ -10,3 +10,4 @@ msal
 httpx
 python-dotenv
 pillow
+PyExecJS
