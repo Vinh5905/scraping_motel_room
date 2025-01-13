@@ -3,6 +3,7 @@ import random
 import re
 import json
 import pickle
+import base64
 import os
 from pathlib import Path
 import time
@@ -14,7 +15,7 @@ from selenium.webdriver.common.proxy import Proxy, ProxyType
 from selenium.webdriver.chrome.service import Service
 from shared.globals import TERMINAL_WIDTH, PROXIES_LIST, SAVE_DATA_PATH, CHECKPOINTS_PATH, COOKIES_PATH, DRIVER_PATH, LOCK_LINK_LIST
 from login.login import Login
-from msgraph_onedrive.operations import upload_file
+from msgraph_onedrive.operations import upload_file, upload_img, create_folder
 import dotenv
 from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
 from shared.colorful import print_banner_colored
@@ -30,6 +31,22 @@ def string_to_dict(text: str):
     value_dict_type = ast.literal_eval(text)
 
     return value_dict_type
+
+def base64_to_binary(base64_list):
+    binary_list = []
+
+    for index in range(len(base64_list)):
+        if base64_list[index].lstrip().startswith('data:image'):
+            base64_data = base64_list[index].split(',')[1]
+        else:
+            base64_data = base64_list[index]
+        
+        binary_data = base64.b64decode(base64_data)
+
+        binary_list.append(binary_data)
+    
+    return binary_list
+
 
 def reset_previous_crawl():
     try:
@@ -155,7 +172,6 @@ def get_pos_start_crawl():
 def is_login(driver):
     try:
         driver.find_element(By.CSS_SELECTOR, '#kct_login')
-        print_banner_colored('Đã login', 'success')
         return False
     except:
         # print_banner_colored('Chưa login', 'wait')
@@ -164,7 +180,6 @@ def is_login(driver):
 def change_cookies_driver(driver):
     # print_banner_colored('Bắt đầu đăng nhập', 'wait')
     if not is_login(driver):
-        print("CHUA LOGIN NEN BAT DAU PREPARE COOKIES")
         login = Login(driver)
         login.prepare_cookies()
     print_banner_colored('Đăng nhập thành công', 'success')
@@ -207,12 +222,27 @@ def save_page_source(page_num, link_num, data):
     dotenv.load_dotenv()
 
     # Nếu để name là link thì sẽ fail vì có nhiều kí tự đặc biệt
-    filename = f'p{page_num}_l{link_num}_u{update_num}.json' 
-    upload_file(os.getenv('FOLDER_STORAGE_ID'), filename, data_upload=data, type='replace')
+    file_name = f'p{page_num}_l{link_num}_u{update_num}.json' 
+    upload_file(os.getenv('FOLDER_STORAGE_ID'), file_name, data_upload=data, type='replace')
     print_banner_colored('Save page source thành công', 'success')
 
     save_link(page_num, link_num, update_num, data['link'])
 
-def save_imgs(page_num, link_num, img_links):
-    # -> Tạo folder riêng
-    # -> Add từng ảnh vào folder
+def save_imgs(page_num, link_num, binary_imgs):
+    update_num = 0
+    dotenv.load_dotenv()
+
+    folder_name = f'p{page_num}_l{link_num}_u{update_num}' 
+    folder_to_save = create_folder(folder_name, folder_id=os.getenv('FOLDER_IMG_STORAGE_ID'), type='replace')
+
+    folder_to_save_id = folder_to_save['id']
+
+    for index, item in enumerate(binary_imgs):
+        file_name = f'p{page_num}_l{link_num}_u{update_num}_{index}.jpg'
+        upload_img(folder_to_save_id, file_name, item, type='replace')
+    
+    print_banner_colored('Upload image thành công', 'success')
+
+
+
+    

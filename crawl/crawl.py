@@ -4,7 +4,7 @@ import json
 import re
 import threading
 from selenium.webdriver.common.by import By
-from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled
+from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled, base64_to_binary
 from shared.colorful import print_banner_colored
 from shared.globals import LOCK_DATA, LOCK_PREVIOUS_CRAWL, LOCK_LINK_LIST, CHECKPOINTS_PATH
 from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
@@ -49,11 +49,45 @@ class Crawl:
                     return elements 
         except:
             return None
-        
+
+    def get_base64_imgs(self, img_links):
+        self.driver.execute_script('''
+            window.getBase64FromImageUrl = async function(url) {
+                return new Promise((resolve, reject) => {
+                    var img = new Image();
+                    img.crossOrigin = 'anonymous'; // CORS bypass
+                    img.onload = function () {
+                        var canvas = document.createElement("canvas");
+                        canvas.width = this.width;
+                        canvas.height = this.height;
+
+                        var ctx = canvas.getContext("2d");
+                        ctx.drawImage(this, 0, 0);
+
+                        var dataURL = canvas.toDataURL("image/jpeg"); // Export Base64 as JPEG
+                        resolve(dataURL);
+                    };
+
+                    img.onerror = function () {
+                        reject("Failed to load image from URL.");
+                    };
+
+                    img.src = url;
+                });
+            };
+        ''')   
+
+        imgs_base64 = []
+
+        for i in range(len(img_links)):
+            base64_data = self.driver.execute_script(f'return getBase64FromImageUrl("{img_links[i]}")')
+            imgs_base64.append(base64_data)
+
+        return imgs_base64
+    
 
     def get_all_links_in_page(self, page = None, try_again = 0):
         time.sleep(3)
-        print("START TO GET PAGE")
 
         page = page or self.__page_num
 
@@ -64,7 +98,6 @@ class Crawl:
             # self.driver = get_new_driver(self.__driver_num)
 
         try: 
-            print("GET DRIVER")
             self.driver.get(get_link_page(self.__base_link, page))
             if not is_login(self.driver):
                 change_cookies_driver(self.driver)
@@ -78,7 +111,6 @@ class Crawl:
                 return all_links
             
         except:
-            print("ERROR SOMETHING SO RESTART RUNNING")
             if try_again < 5:
                 print_banner_colored(title=f'(PAGE {page})', style='danger')
 
@@ -118,7 +150,9 @@ class Crawl:
             for index in range(len(imgs)):
                 imgs[index] = re.sub(r'"', r"'", imgs[index])
                 imgs[index] = re.sub(r"[\s\S]+(url\('([\s\S]+)'\))[\s\S]*", r"\2", imgs[index])
-
+            
+            imgs_base64 = self.get_base64_imgs(imgs)
+            binary_imgs = base64_to_binary(imgs_base64)
 
             # TIME CRAWL THIS POST
                 # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
@@ -137,7 +171,7 @@ class Crawl:
             }
 
             print_banner_colored('Lấy xong dữ liệu từ url', 'success')
-            return (data, imgs)
+            return (data, binary_imgs)
 
         except:            
             if try_again <= 5:

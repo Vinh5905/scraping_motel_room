@@ -42,4 +42,5 @@ def push_all_to_onedrive():
     update_extract_info()
     update_link_list()
 
-# push_all_to_onedrive()
+# if __name__ == '__main__':
+#     push_all_to_onedrive()
