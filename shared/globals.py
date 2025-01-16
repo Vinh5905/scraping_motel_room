@@ -28,9 +28,18 @@ ALL_EXTRACTED_DATA_PATH = Path('./data/all_extracted_data/data.csv')
 ACCESS_TOKEN = Path('./data/access_token/access_token.json')
 
 CHECKPOINTS_PATH = {
-    'CRAWL': Path('./data/checkpoints/previous_crawl_info.json'),
-    'EXTRACT': Path('./data/checkpoints/previous_extract_info.json'),
-    'LINK_LIST': Path('./data/checkpoints/previous_link_list.json')
+    'BATDONGSAN': {
+        'NAME': 'BATDONGSAN',
+        'CRAWL': Path('./data/checkpoints_batdongsan/previous_crawl_info.json'),
+        'EXTRACT': Path('./data/checkpoints_batdongsan/previous_extract_info.json'),
+        'LINK_LIST': Path('./data/checkpoints_batdongsan/previous_link_list.json')
+    },
+    'CHOTOT': {
+        'NAME': 'CHOTOT',
+        'CRAWL': Path('./data/checkpoints_chotot/previous_crawl_info.json'),
+        'EXTRACT': Path('./data/checkpoints_chotot/previous_extract_info.json'),
+        'LINK_LIST': Path('./data/checkpoints_chotot/previous_link_list.json')
+    }
 }
 
 COOKIES_PATH = Path('./data/cookies/cookies.pkl')
@@ -49,3 +58,6 @@ CHECK_FORMATTED_PAGE_SOURCE_PATH = Path('./check_page_source/formatted.html')
 # DRIVER
 DRIVER_PATH = lambda num: Path(f'/Users/hoangvinh/OneDrive/Workspace/Support/Driver/chromedriver-mac-x64_{str(num)}/chromedriver')
 
+
+# UPDATE TIME
+UPDATE_TIME = 0

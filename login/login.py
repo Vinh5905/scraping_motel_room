@@ -1,14 +1,40 @@
 import pickle
+import time
 from shared.globals import COOKIES_PATH
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 
-class Login:
+# AUTO LOGIN (failed)
+        # email_input = driver.find_element(By.CSS_SELECTOR, 'input[type="email"]')
+        # button_from_email_to_next = driver.find_element(By.CSS_SELECTOR, 'button.nCP5yc')
+
+        # ActionChains(driver) \
+        #     .send_keys_to_element(email_input, email_name) \
+        #     .pause(2) \
+        #     .click(button_from_email_to_next) \
+        #     .perform()
+
+        # password_input = driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
+        # button_from_password_to_next = driver.find_element(By.CSS_SELECTOR, 'button.nCP5yc')
+
+        # ActionChains(driver) \
+        #     .send_keys_to_element(password_input, password) \
+        #     .pause(2) \
+        #     .click(button_from_password_to_next) \
+        #     .perform()
+
+        # time.sleep(2)
+        # button.click()
+        # time.sleep(10)
+        # print(driver.window_handles)
+        # driver.switch_to.default_content()
+
+
+class Login_Batdongsan():
     def __init__(self, driver):
         self.__driver = driver
-        pass
-
+    
     def prepare_cookies(self):
         login_button = self.__driver.find_element(By.CSS_SELECTOR, '#kct_login')
         ActionChains(self.__driver) \
@@ -42,28 +68,28 @@ class Login:
             
         self.__driver.refresh()
 
+class Login_Chotot():
+    def __init__(self, driver):
+        self.__driver = driver
+    
+    def prepare_cookies(self):
+        login_button = self.__driver.find_element(By.CSS_SELECTOR, '.ct_lr__p1thhhsi .aw__b1358qut')
+        login_button.click()
 
-# AUTO LOGIN (failed)
-        # email_input = driver.find_element(By.CSS_SELECTOR, 'input[type="email"]')
-        # button_from_email_to_next = driver.find_element(By.CSS_SELECTOR, 'button.nCP5yc')
+        time.sleep(5)   # wait to redirect to login
 
-        # ActionChains(driver) \
-        #     .send_keys_to_element(email_input, email_name) \
-        #     .pause(2) \
-        #     .click(button_from_email_to_next) \
-        #     .perform()
+        wait = WebDriverWait(self.__driver, 20)
 
-        # password_input = driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
-        # button_from_password_to_next = driver.find_element(By.CSS_SELECTOR, 'button.nCP5yc')
+        gg_login = wait.until(lambda driver: driver.find_element(By.CSS_SELECTOR, '#google-login-btn'))
+        gg_login.click()
 
-        # ActionChains(driver) \
-        #     .send_keys_to_element(password_input, password) \
-        #     .pause(2) \
-        #     .click(button_from_password_to_next) \
-        #     .perform()
-
-        # time.sleep(2)
-        # button.click()
-        # time.sleep(10)
-        # print(driver.window_handles)
-        # driver.switch_to.default_content()
+        while True:
+            print('CAN I START NOW ??')
+            print('[Y] Yes     [N] No')
+            wait_to_login_success = input('Answer: ')
+            if wait_to_login_success.lower() == 'y' or wait_to_login_success.lower() == 'yes':
+                break
+        
+        self.__driver.refresh()
+        
+    

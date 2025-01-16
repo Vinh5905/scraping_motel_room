@@ -33,7 +33,6 @@ def decorator_access_token(func):
                         'access_token': access_token
                     }, file)
             else:
-                print('RUn here??')
                 try:
                     with open(ACCESS_TOKEN, 'r') as file:
                         access_token = json.load(file)
@@ -215,17 +214,5 @@ def get_access_token_for_current():
     return access_token
 
 # print(get_access_token_for_current())
-dotenv.load_dotenv()
-print(list_folder_children(folder_id=os.getenv('FOLDER_FRAUD_DETECTION_ID')))
-'''
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094536-e507_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094541-cc2f_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094541-cfdc_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094541-8c0e_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094542-6678_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094542-c1dd_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094543-1e5b_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094543-18cb_wm.jpg
-https://file4.batdongsan.com.vn/resize/1275x717/2024/10/31/20241031094544-dbc0_wm.jpg
-'''
-
+# dotenv.load_dotenv()
+# print(list_folder_children(folder_id=os.getenv('FOLDER_FRAUD_DETECTION_ID')))

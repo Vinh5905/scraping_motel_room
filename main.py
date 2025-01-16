@@ -32,10 +32,7 @@ from shared.support_func import reset_previous_crawl
 '''
 
 if __name__ == '__main__':  
-    base = 'http://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
-    reset_previous_crawl()
-
-    run = MultiCrawl(base, 1)
+    run = MultiCrawl('batdongsan', 1)
     run.crawl()
 
     # run = Crawl(base)

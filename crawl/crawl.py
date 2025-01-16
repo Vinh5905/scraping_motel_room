@@ -4,7 +4,7 @@ import json
 import re
 import threading
 from selenium.webdriver.common.by import By
-from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled, base64_to_binary
+from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled, base64_to_binary, save_link, reset_previous_crawl
 from shared.colorful import print_banner_colored
 from shared.globals import LOCK_DATA, LOCK_PREVIOUS_CRAWL, LOCK_LINK_LIST, CHECKPOINTS_PATH
 from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
@@ -16,15 +16,28 @@ class Crawl:
     __page_num = None
     __link_num = None
     __driver_num = None
+    __web = None
+    __security = False
 
-    def __init__(self, base_link, driver_num = 1):
-        self.__base_link = base_link
+    def __init__(self, web, driver_num = 1):
         self.__driver_num = driver_num
-        self.driver = get_new_driver(self.__driver_num)
+        self.__web = web
+
+        match (self.__web):
+            case 'BATDONGSAN':
+                self.__base_link = 'http://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
+                self.PATH = CHECKPOINTS_PATH['BATDONGSAN']
+            case 'CHOTOT':
+                self.__security = True
+                self.__base_link = 'https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh'
+                self.PATH = CHECKPOINTS_PATH['CHOTOT']
+
+        self.driver = get_new_driver(driver_num=self.__driver_num, security=self.__security)
+        
 
         # Get pos .....
         with LOCK_PREVIOUS_CRAWL:
-            self.__page_num, self.__link_num = get_pos_start_crawl()
+            self.__page_num, self.__link_num = get_pos_start_crawl(self.PATH)
 
     def get_data_safe(self, text_selector, scope_element = None, multi_value = False, return_text = False, attr = ''):
         scope_element = scope_element or self.driver
@@ -97,12 +110,16 @@ class Crawl:
             # self.quit_current_driver()
             # self.driver = get_new_driver(self.__driver_num)
 
-        try: 
-            self.driver.get(get_link_page(self.__base_link, page))
-            if not is_login(self.driver):
-                change_cookies_driver(self.driver)
+        # try: 
+            self.driver.get(get_link_page(self.__base_link, page, self.PATH))
+            if not is_login(self.driver, self.PATH):
+                change_cookies_driver(self.driver, self.PATH)
 
-            all_links = self.get_data_safe('.js__card.js__card-full-web > .js__product-link-for-product-id', multi_value=True, attr='href')
+            match self.PATH['NAME']:
+                case 'BATDONGSAN':
+                    all_links = self.get_data_safe('.js__card.js__card-full-web > .js__product-link-for-product-id', multi_value=True, attr='href')
+                case 'CHOTOT':
+                    pass
 
             if not len(all_links): 
                 raise ValueError("No links found!!!!")
@@ -110,13 +127,13 @@ class Crawl:
                 print_banner_colored(title=f'(PAGE {page})', style='success')
                 return all_links
             
-        except:
-            if try_again < 5:
-                print_banner_colored(title=f'(PAGE {page})', style='danger')
+        # except:
+        #     if try_again < 5:
+        #         print_banner_colored(title=f'(PAGE {page})', style='danger')
 
-                return self.get_all_links_in_page(try_again=(try_again + 1))
-            else:
-                raise ValueError("Need to get again, can't get this page!!!!")
+        #         return self.get_all_links_in_page(try_again=(try_again + 1))
+        #     else:
+        #         raise ValueError("Need to get again, can't get this page!!!!")
             
 
     def get_data_in_link(self, link, try_again = 0):
@@ -128,54 +145,68 @@ class Crawl:
             # self.quit_current_driver()
             # self.driver = get_new_driver(self.__driver_num)
 
-
         try:
-            # Start to get open link
-            self.driver.get(link)
-            # time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
-            if not is_login(self.driver):
-                change_cookies_driver(self.driver)
+            match self.PATH['NAME']:
+                case 'BATDONGSAN':
+                    # Start to get open link
+                    self.driver.get(link)
+                    # time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
+                    if not is_login(self.driver, self.PATH):
+                        change_cookies_driver(self.driver, self.PATH)
 
-            phone_number_button_display = self.driver.find_element(By.CSS_SELECTOR, '.js__ob-agent-info + .js__ob-contact-info > .js__phone')
-            phone_number_button_display.click()
+                    phone_number_button_display = self.driver.find_element(By.CSS_SELECTOR, '.js__ob-agent-info + .js__ob-contact-info > .js__phone')
+                    phone_number_button_display.click()
+                    time.sleep(4)
 
-            time.sleep(4)
+                    click_again = 0
+                    while phone_number_button_display.text.find('***') != -1:
+                        phone_number_button_display.click()
+                        time.sleep(4)
+                        click_again += 1
+                        if click_again == 3:
+                            raise ValueError('Click khong thanh cong')
+                        
 
-            # Page source
-            page_source = self.driver.page_source
+                    # Page source
+                    page_source = self.driver.page_source
 
-            # Image
-            imgs = self.get_data_safe('.swiper-slide.js__media-item-container div.re__pr-image-cover', multi_value=True)
-            imgs = [img.get_attribute('style') or img.get_attribute('data-bg') for img in imgs]
-            for index in range(len(imgs)):
-                imgs[index] = re.sub(r'"', r"'", imgs[index])
-                imgs[index] = re.sub(r"[\s\S]+(url\('([\s\S]+)'\))[\s\S]*", r"\2", imgs[index])
-            
-            imgs_base64 = self.get_base64_imgs(imgs)
-            binary_imgs = base64_to_binary(imgs_base64)
+                    # Image
+                    imgs = self.get_data_safe('.swiper-slide.js__media-item-container div.re__pr-image-cover', multi_value=True)
+                    imgs = [img.get_attribute('style') or img.get_attribute('data-bg') for img in imgs]
+                    for index in range(len(imgs)):
+                        imgs[index] = re.sub(r'"', r"'", imgs[index])
+                        imgs[index] = re.sub(r"[\s\S]+(url\('([\s\S]+)'\))[\s\S]*", r"\2", imgs[index])
+                    
+                    imgs_base64 = self.get_base64_imgs(imgs)
+                    binary_imgs = base64_to_binary(imgs_base64)
 
-            # TIME CRAWL THIS POST
-                # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
-                # Example of ISO Format: 2021-07-27T16:02:08.070557
-            now = {
-                'time_scraping': datetime.now().isoformat()
-            }
+                    # TIME CRAWL THIS POST
+                        # Need to change datetime type to string before save into json file (if not -> TypeError: Object of type datetime is not JSON serializable)
+                        # Example of ISO Format: 2021-07-27T16:02:08.070557
+                    now = {
+                        'time_scraping': datetime.now().isoformat()
+                    }
 
-            if not page_source:
-                raise ValueError("PAGE SOURCE NO VALUE ???")
+                    if not page_source:
+                        raise ValueError("PAGE SOURCE NO VALUE ???")
 
-            data = {
-                'link': link,
-                'time_crawling': now,
-                'page_source': page_source
-            }
+                    data = {
+                        'link': link,
+                        'time_crawling': now,
+                        'page_source': page_source
+                    }
 
-            print_banner_colored('Lấy xong dữ liệu từ url', 'success')
-            return (data, binary_imgs)
+                    print_banner_colored('Lấy xong dữ liệu từ url', 'success')
+                    return (data, binary_imgs)
+                case 'CHOTOT':
+                    pass
+                case '_':
+                    raise ValueError('KHONG PHU HOP PATH["NAME"]')
 
-        except:            
+        except Exception as e:            
             if try_again <= 5:
                 print_banner_colored(title=f'(PAGE {self.__page_num}) - (LINK {self.__link_num})', style='danger')
+                print(f'ERROR: {e}')
 
                 return self.get_data_in_link(link, try_again=(try_again + 1))
             else:
@@ -183,7 +214,7 @@ class Crawl:
     
     def save_change_page_link_num(self, page_num, link_num, value_to_stop, exist=False):
         with LOCK_PREVIOUS_CRAWL:
-            with open(CHECKPOINTS_PATH['CRAWL'], 'r') as file:
+            with open(self.PATH['CRAWL'], 'r') as file:
                 multi_crawl_change = json.load(file)
 
         for index, item in enumerate(multi_crawl_change['running_thread']):
@@ -212,10 +243,10 @@ class Crawl:
                 break
 
         with LOCK_PREVIOUS_CRAWL:
-            with open(CHECKPOINTS_PATH['CRAWL'], 'w') as file:
+            with open(self.PATH['CRAWL'], 'w') as file:
                 json.dump(multi_crawl_change, file)
 
-            update_crawl_info()
+            update_crawl_info(self.PATH)
 
         if exist:
             print_banner_colored(title=f'(PAGE {page_num}) - (LINK {link_num - 1})', style='exist')
@@ -232,7 +263,7 @@ class Crawl:
             count_link = len(all_links)
 
             for index in range(self.__link_num, count_link):
-                if is_crawled(all_links[index]):
+                if is_crawled(all_links[index], self.PATH):
                     self.save_change_page_link_num(self.__page_num, self.__link_num + 1, count_link, exist=True)
                     continue
 
@@ -240,20 +271,26 @@ class Crawl:
 
                 # Save data
                 with LOCK_DATA: 
-                    save_page_source(self.__page_num, self.__link_num, data[0])
-                save_imgs(self.__page_num, self.__link_num, data[1])
+                    save_page_source(self.__page_num, self.__link_num, data[0], self.PATH)
+
+                save_imgs(self.__page_num, self.__link_num, data[1], self.PATH)
                 # If success then change file previous_crawl.txt to next post
+                save_link(self.__page_num, self.__link_num, data[0]['link'], self.PATH)
                 self.save_change_page_link_num(self.__page_num, self.__link_num + 1, count_link)
 
 
-
 class MultiCrawl:
-    def __init__(self, base_link, count_driver): 
-        self.__base_link = base_link
-        self.__count_driver = count_driver
+    def __init__(self, web: str, count_driver): 
+        web = web.upper()
+        if web in ('BATDONGSAN', 'CHOTOT'):
+            reset_previous_crawl(CHECKPOINTS_PATH[web])
+            self.__count_driver = count_driver
+            self.__web = web
+        else:
+            raise ValueError('WEB phải thuộc batdongsan - chotot')
 
     def crawl(self):
         for i in range(self.__count_driver):
-            single_crawl = Crawl(self.__base_link, i + 1)
+            single_crawl = Crawl(self.__web, driver_num = i + 1)
             thread = threading.Thread(target=single_crawl.crawl)
             thread.start()
