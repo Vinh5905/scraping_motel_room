@@ -6,7 +6,7 @@ import threading
 from selenium.webdriver.common.by import By
 from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled, base64_to_binary, save_link, reset_previous_crawl
 from shared.colorful import print_banner_colored
-from shared.globals import LOCK_DATA, LOCK_PREVIOUS_CRAWL, LOCK_LINK_LIST, CHECKPOINTS_PATH
+from shared.globals import LOCK_DATA, LOCK_PREVIOUS_CRAWL, LOCK_LINK_LIST, CHECKPOINTS_PATH, CHECKPOINTS_PATH_TEST, COOKIES_PATH
 from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
 
 # Wait cho ảnh hiện hết lên rồi mới lấy đượcc
@@ -19,22 +19,21 @@ class Crawl:
     __web = None
     __security = False
 
-    def __init__(self, web, driver_num = 1):
+    def __init__(self, web, test, driver_num = 1):
         self.__driver_num = driver_num
         self.__web = web
 
         match (self.__web):
             case 'BATDONGSAN':
                 self.__base_link = 'http://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
-                self.PATH = CHECKPOINTS_PATH['BATDONGSAN']
+                self.PATH = CHECKPOINTS_PATH_TEST['BATDONGSAN'] if test else CHECKPOINTS_PATH['BATDONGSAN']
             case 'CHOTOT':
                 self.__security = True
                 self.__base_link = 'https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh'
-                self.PATH = CHECKPOINTS_PATH['CHOTOT']
+                self.PATH = CHECKPOINTS_PATH_TEST['CHOTOT'] if test else CHECKPOINTS_PATH['CHOTOT']
 
         self.driver = get_new_driver(driver_num=self.__driver_num, security=self.__security)
         
-
         # Get pos .....
         with LOCK_PREVIOUS_CRAWL:
             self.__page_num, self.__link_num = get_pos_start_crawl(self.PATH)
@@ -150,7 +149,7 @@ class Crawl:
                 case 'BATDONGSAN':
                     # Start to get open link
                     self.driver.get(link)
-                    # time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
+                    time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
                     if not is_login(self.driver, self.PATH):
                         change_cookies_driver(self.driver, self.PATH)
 
@@ -280,17 +279,24 @@ class Crawl:
 
 
 class MultiCrawl:
-    def __init__(self, web: str, count_driver): 
+    def __init__(self, web: str, count_driver, test = False): 
         web = web.upper()
+
         if web in ('BATDONGSAN', 'CHOTOT'):
-            reset_previous_crawl(CHECKPOINTS_PATH[web])
             self.__count_driver = count_driver
             self.__web = web
+            self.__test = test
+
+            PATH = CHECKPOINTS_PATH_TEST[web] if self.__test else CHECKPOINTS_PATH[web]
+
+            # Step before crawl
+            PATH['CHECKPOINT'].mkdir(exist_ok=True)
+            reset_previous_crawl(CHECKPOINTS_PATH_TEST[web] if self.__test else CHECKPOINTS_PATH[web])
         else:
             raise ValueError('WEB phải thuộc batdongsan - chotot')
 
     def crawl(self):
         for i in range(self.__count_driver):
-            single_crawl = Crawl(self.__web, driver_num = i + 1)
+            single_crawl = Crawl(self.__web, self.__test, driver_num = i + 1)
             thread = threading.Thread(target=single_crawl.crawl)
             thread.start()

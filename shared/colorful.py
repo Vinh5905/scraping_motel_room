@@ -44,11 +44,11 @@ def print_banner_colored(title: str = '', style='small'):
             print(Fore.GREEN + title.center(size_max) + Style.RESET_ALL)
         
         case 'exist':
-            title = '────── ' + title + ' ──────'
+            title = '────── 👌 ' + title + '👌 ──────'
             print(Fore.YELLOW + title.center(size_max) + Style.RESET_ALL)
 
         case 'wait':
-            title = '────── ' + title + ' ──────'
+            title = '────── ⏰ ' + title + ' ⏰ ──────'
             print(Fore.CYAN + title.center(size_max) + Style.RESET_ALL)
 
 

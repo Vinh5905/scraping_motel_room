@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import time
 import dotenv
+import threading
 # from bs4 import BeautifulSoup
 # from datetime import datetime
 from selenium import webdriver
@@ -78,7 +79,6 @@ def get_proxy_random(proxies_list_custom = None):
 
 def get_new_driver(driver_num = 1, chorme_options_custom = None, security=False):
     if not security:
-        print('Driver manager')
         # If not have custom then use default self-config
         chrome_options = chorme_options_custom or webdriver.ChromeOptions()
         # chrome_service = Service('/Users/hoangvinh/OneDrive/Workspace/Support/Driver/chrome-headless-shell-mac-x64/chrome-headless-shell')
@@ -92,7 +92,7 @@ def get_new_driver(driver_num = 1, chorme_options_custom = None, security=False)
             chrome_options.add_argument('--disable-blink-features=AutomationControlled')
             chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
             chrome_options.add_experimental_option("useAutomationExtension", False)
-            # chrome_options.add_argument("--start-maximized")
+            chrome_options.add_argument("--start-maximized")
             # chrome_options.add_argument('--ignore-ssl-errors=yes')
             # chrome_options.add_argument('--ignore-certificate-errors')
             # chrome_options.add_argument('--headless')
@@ -108,6 +108,7 @@ def get_new_driver(driver_num = 1, chorme_options_custom = None, security=False)
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
         chrome_options.add_experimental_option("useAutomationExtension", False)
+        chrome_options.add_argument("--start-maximized")
         driver = webdriver.Chrome(options=chrome_options)
     driver.implicitly_wait(5)
 
@@ -208,15 +209,35 @@ def is_login(driver, PATH):
                 return True
 
 def change_cookies_driver(driver, PATH):
-    # print_banner_colored('Bắt đầu đăng nhập', 'wait')
-    if not is_login(driver, PATH):
-        match PATH['NAME']:
-            case 'BATDONGSAN':
-                login = Login_Batdongsan(driver)
-            case 'CHOTOT':
-                login = Login_Chotot(driver)
+    try:
+        print_banner_colored('Tìm và bắt đầu load cookies . . .', 'wait')
+        with open(COOKIES_PATH, 'rb') as file:
+            cookies = pickle.load(file)
+        # print(cookies)
+        
+        for cookie in cookies:
+            driver.add_cookie(cookie)
+            # print('Add cookie: ', cookie)
+        
+        print_banner_colored('Đã add hết toàn bộ cookies', 'success')
+        time.sleep(2)
+        driver.refresh()
+        
+        time.sleep(2)
+        if not is_login(driver, PATH):
+            raise ValueError('Cookie het han roii !!')
+    except Exception as e:
+        print_banner_colored(f'Thong bao: {e}', 'danger')
+        # print_banner_colored('Bắt đầu đăng nhập', 'wait')
+        if not is_login(driver, PATH):
+            match PATH['NAME']:
+                case 'BATDONGSAN':
+                    login = Login_Batdongsan(driver)
+                case 'CHOTOT':
+                    login = Login_Chotot(driver)
 
-        login.prepare_cookies()
+            print_banner_colored('Prepare cookies . . .', 'wait')
+            login.prepare_cookies()
 
     print_banner_colored('Đăng nhập thành công', 'success')
     
@@ -255,11 +276,7 @@ def save_link(page_num, link_num, link, PATH):
 
 def save_page_source(page_num, link_num, data, PATH):
     dotenv.load_dotenv()
-    match PATH['NAME']:
-        case 'BATDONGSAN':
-            folder_storage = os.getenv('FOLDER_BATDONGSAN_STORAGE_ID')
-        case 'CHOTOT':
-            folder_storage = os.getenv('FOLDER_CHOTOT_STORAGE_ID')
+    folder_storage = os.getenv(PATH['FOLDER_STORAGE_ID_ENV_NAME'])
 
     # Nếu để name là link thì sẽ fail vì có nhiều kí tự đặc biệt
     file_name = f'p{page_num}_l{link_num}_u{UPDATE_TIME}.json' 
@@ -270,19 +287,21 @@ def save_page_source(page_num, link_num, data, PATH):
 def save_imgs(page_num, link_num, binary_imgs, PATH):
     dotenv.load_dotenv()
 
-    match PATH['NAME']:
-        case 'BATDONGSAN':
-            folder_storage_img = os.getenv('FOLDER_BATDONGSAN_IMG_STORAGE_ID')
-        case 'CHOTOT':
-            folder_storage_img = os.getenv('FOLDER_CHOTOT_IMG_STORAGE_ID')
+    folder_storage_img = os.getenv(PATH['FOLDER_IMG_STORAGE_ID_ENV_NAME'])
 
     folder_name = f'p{page_num}_l{link_num}_u{UPDATE_TIME}' 
     folder_to_save = create_folder(folder_name, folder_id=folder_storage_img, type='replace')
 
     folder_to_save_id = folder_to_save['id']
 
+    threads = []
     for index, item in enumerate(binary_imgs):
         file_name = f'p{page_num}_l{link_num}_u{UPDATE_TIME}_{index}.jpg'
-        upload_img(folder_to_save_id, file_name, item, type='replace')
+
+        thread = threading.Thread(target=lambda: upload_img(folder_to_save_id, file_name, item, type='replace'))
+        threads.append(thread)
+        thread.start()
+    
+    for thread in threads: thread.join()
     
     print_banner_colored('Upload image thành công', 'success')

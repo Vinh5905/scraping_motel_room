@@ -61,10 +61,10 @@ class Login_Batdongsan():
                 break
         
         self.__driver.switch_to.window(original_window) # Cung ko nhat thiet phai doi lại origin để lấy cookies, vì selenium chỉ đổi DOM thôi
-        # cookies = self.__driver.get_cookies()
-        # print(cookies)
-        # with open(COOKIES_PATH, 'wb') as file:
-        #     pickle.dump(cookies, file)
+        cookies = self.__driver.get_cookies()
+        print(cookies)
+        with open(COOKIES_PATH, 'wb') as file:
+            pickle.dump(cookies, file)
             
         self.__driver.refresh()
 

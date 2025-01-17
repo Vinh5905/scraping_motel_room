@@ -32,7 +32,16 @@ from shared.support_func import reset_previous_crawl
 '''
 
 if __name__ == '__main__':  
-    run = MultiCrawl('batdongsan', 1)
+    test = False
+    
+    print('Bạn có muốn vào chế độ TEST không?')
+    print('[Y] Yes     [N] No')
+    test_check = input('Answer: ')
+    if test_check.lower() == 'y' or test_check.lower() == 'yes':
+        test = True
+
+    run = MultiCrawl('batdongsan', 1, test = test)
+    # run = MultiCrawl('batdongsan', 1, test = True)
     run.crawl()
 
     # run = Crawl(base)
