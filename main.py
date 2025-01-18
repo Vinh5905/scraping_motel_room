@@ -1,50 +1,44 @@
-from crawl.crawl import MultiCrawl, Crawl
-from shared.support_func import reset_previous_crawl
-
-'''
-- Multiple:
-    + Tạo cấu trúc file để change sau mỗi lần crawl để trách bị đè lên nhau 
-        Cấu trúc :
-            {   
-                next_page: ...,
-                running_thread: [
-                    {
-                        page,
-                        link,
-                        isCrawl
-                    }
-                ]
-            }
-    + Dùng thread để chạy nhiều crawl() liên tiếp, dùng lock cho save, thay đổi giá trị của file trên.
-
-    + Lưu ý từng bước :
-        * Reset lại trạng thái thành False hết cho lần chạy mới
-
-        * Khi lần đầu vô, check các lần crawl trước đó : (lock)
-            - Nếu đã xuất hiện thì check từ trên xuống, isCrawl False thì lấy đó là đổi thành True
-            - Nếu tất cả đều True hoặc chưa có gì, thì lấy page của next_page để tạo và add vào running_thread, và sau đó next_page + 1
-
-        * Lúc save file (lock)
-
-        * Sau khi chạy xong hết đến 20 rồi thì tiếp tục từ next_page
-        
-        * Chạy xong mà bị end chương trình là isCrawl thành False hết.
-'''
+from crawl.crawl import MultiCrawl
+from scraping.scraping_func import Extract
+from shared.support_func import return_PATH
 
 if __name__ == '__main__':  
-    test = False
-    
-    print('Bạn có muốn vào chế độ TEST không?')
-    print('[Y] Yes     [N] No')
-    test_check = input('Answer: ')
-    if test_check.lower() == 'y' or test_check.lower() == 'yes':
-        test = True
 
-    run = MultiCrawl('batdongsan', 1, test = test)
-    # run = MultiCrawl('batdongsan', 1, test = True)
-    run.crawl()
+    print('Bạn muốn vào thực hiện hành động với web nào ?')
+    print('[B] Batdongsan           [C] Chotot')
+    web_input = input('Answer: ')
+    match web_input:
+        case 'B' | 'b':
+            web = 'BATDONGSAN'
+        case 'C' | 'c':
+            web = 'CHOTOT'
+        case '_':
+            raise ValueError('WRONG INPUT !!!')
 
-    # run = Crawl(base)
-    # run.crawl()
-    # run.get_data_in_link('https://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-duong-pham-huu-lau-xa-phuoc-kieng/-2tr9-day-du-tien-nghi-noi-that-wc-chung-co-n-vien-ve-sinh-bep-camera-24-24-pr41376284')
-    
+
+    print(f'Bạn muốn vào chế độ TEST hay REAL của {web}?')
+    print('[T] TEST           [R] REAL')
+    test_input = input('Answer: ')
+    match test_input:
+        case 'T' | 't':
+            test = True
+        case 'R' | 'r':
+            test = False
+        case '_':
+            raise ValueError('WRONG INPUT !!!')
+
+    # PATH
+    PATH = return_PATH(web, test)
+
+    print('Bạn muốn Crawling hay Scraping?')
+    print('[C] Crawling           [S] Scraping')
+    action_input = input('Answer: ')
+    match action_input:
+        case 'C' | 'c':
+            run = MultiCrawl(PATH)
+            run.crawl()    
+        case 'S' | 's':
+            run = Extract(PATH)
+            run.extract()
+        case '_':
+            raise ValueError('WRONG INPUT !!!')

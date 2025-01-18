@@ -15,9 +15,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 from selenium.webdriver.chrome.service import Service
-from shared.globals import TERMINAL_WIDTH, PROXIES_LIST, SAVE_DATA_PATH, CHECKPOINTS_PATH, COOKIES_PATH, DRIVER_PATH, LOCK_LINK_LIST, UPDATE_TIME
+from shared.globals import TERMINAL_WIDTH, PROXIES_LIST, SAVE_DATA_PATH, CHECKPOINTS_PATH, COOKIES_PATH, DRIVER_PATH, LOCK_LINK_LIST, UPDATE_TIME, CHECKPOINTS_PATH_TEST
 from login.login import Login_Batdongsan, Login_Chotot
-from msgraph_onedrive.operations import upload_file, upload_img, create_folder
+from msgraph_onedrive.operations import upload_file, upload_img, create_folder, search_file_id, download_file
 from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
 from shared.colorful import print_banner_colored
 
@@ -59,8 +59,20 @@ def reset_previous_crawl(PATH):
 
         with open(PATH['CRAWL'], 'w') as file:
             json.dump(previous_multi_crawl, file)
+
     except:
         return        
+
+
+def return_PATH(web, test):
+    web = web.upper()
+
+    if web in ('BATDONGSAN', 'CHOTOT'):
+        PATH = CHECKPOINTS_PATH_TEST[web] if test else CHECKPOINTS_PATH[web]
+        return PATH 
+    else:
+        raise ValueError('WEB is not in value range (BATDONGSAN - CHOTOT)')
+    
 
 def get_proxy_random(proxies_list_custom = None): 
     # If not have custom, get globals value
@@ -167,7 +179,6 @@ def get_pos_start_crawl(PATH):
 
             with open(PATH['CRAWL'], 'w') as file:
                 json.dump(previous_crawl, file)
-
             return [page_num, link_num]
     
     # If not have any False
@@ -279,7 +290,7 @@ def save_page_source(page_num, link_num, data, PATH):
     folder_storage = os.getenv(PATH['FOLDER_STORAGE_ID_ENV_NAME'])
 
     # Nếu để name là link thì sẽ fail vì có nhiều kí tự đặc biệt
-    file_name = f'p{page_num}_l{link_num}_u{UPDATE_TIME}.json' 
+    file_name = f'u{UPDATE_TIME}_p{page_num}_l{link_num}.json' 
     upload_file(folder_storage, file_name, data_upload=data, type='replace')
     print_banner_colored('Save page source thành công', 'success')
 
@@ -289,14 +300,14 @@ def save_imgs(page_num, link_num, binary_imgs, PATH):
 
     folder_storage_img = os.getenv(PATH['FOLDER_IMG_STORAGE_ID_ENV_NAME'])
 
-    folder_name = f'p{page_num}_l{link_num}_u{UPDATE_TIME}' 
+    folder_name = f'u{UPDATE_TIME}_p{page_num}_l{link_num}' 
     folder_to_save = create_folder(folder_name, folder_id=folder_storage_img, type='replace')
 
     folder_to_save_id = folder_to_save['id']
 
     threads = []
     for index, item in enumerate(binary_imgs):
-        file_name = f'p{page_num}_l{link_num}_u{UPDATE_TIME}_{index}.jpg'
+        file_name = f'u{UPDATE_TIME}_p{page_num}_l{link_num}_{index}.jpg'
 
         thread = threading.Thread(target=lambda: upload_img(folder_to_save_id, file_name, item, type='replace'))
         threads.append(thread)
@@ -305,3 +316,20 @@ def save_imgs(page_num, link_num, binary_imgs, PATH):
     for thread in threads: thread.join()
     
     print_banner_colored('Upload image thành công', 'success')
+
+
+def save_page_source_need_scraping(page_num, link_num, PATH):
+    file_name = f'u{UPDATE_TIME}_p{page_num}_l{link_num}.json'
+
+    try:
+        with open(PATH['EXTRACT'], 'r') as file:
+            files_need_scraping = json.load(file)
+    except:
+        files_need_scraping = []
+    
+    files_need_scraping.append(file_name)
+
+    with open(PATH['EXTRACT'], 'w') as file:
+        json.dump(files_need_scraping, file)
+
+    update_extract_info(PATH)

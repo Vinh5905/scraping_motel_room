@@ -17,3 +17,5 @@ check_page_source/formatted.html
 TEST_ONEDRIVE
 
 token_cache.bin
+
+cookies/cookies.pkl

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sys
 import time
@@ -7,7 +8,8 @@ from datetime import datetime
 from shared.support_func import string_to_dict
 from crawl.crawl import get_new_driver
 from shared.colorful import print_banner_colored
-from shared.globals import CHECKPOINTS_PATH, SAVE_DATA_PATH
+from shared.globals import CHECKPOINTS_PATH, CHECKPOINTS_PATH_TEST, SAVE_DATA_PATH
+from msgraph_onedrive.operations import search_file_id, download_file, upload_file
 
 def get_data_in_link(link, try_again = 0):
     time.sleep(3)
@@ -38,23 +40,16 @@ def get_data_in_link(link, try_again = 0):
             sys.exit("KHẢ NĂNG BỊ MẤT MẠNG")
 
 class Extract():
-    def __init__(self):
-        # Get max page can extract
-        with open(CHECKPOINTS_PATH['CRAWL'], 'r') as file:
-            try:
-                info_crawl = json.load(file)
-            except:
-                raise ValueError("STILL NOT HAVE ANY PAGE CRAWL DONE !!")
+    def __init__(self, PATH):
+        self.PATH = PATH
 
-            self.page_to_stop = float('inf')
-            for item in info_crawl['running_thread']:
-                self.page_to_stop = min(self.page_to_stop, item['page'] - 1)
-
-            if self.page_to_stop == 0:
-                raise ValueError("STILL NOT HAVE ANY PAGE CRAWL DONE !!")
-        
-        with open(CHECKPOINTS_PATH['EXTRACT'], 'r') as file:
-            self.page_start = json.load(file)
+        try:
+            with open(self.PATH['EXTRACT'], 'r') as file:
+                self.files_need_scraping = json.load(file)
+        except:
+            with open(self.PATH['EXTRACT'], 'w') as file:
+                self.files_need_scraping = []
+                json.dump(self.files_need_scraping, file)
 
 
     def get_data_safe(self, soup, text_selector, multi_value = False, return_text = False, attr = ''):
@@ -63,6 +58,7 @@ class Extract():
                 elements = soup.select(text_selector)
 
                 if len(elements) == 0: return None
+
                 if return_text:
                     return [element.get_text() for element in elements]
                 elif attr:
@@ -81,31 +77,34 @@ class Extract():
             return None
         
 
-    def extract_one_page_source(self, link, page_source, index):
-        page_source_data = page_source
+    def extract_one_page_source(self, page_source_raw):
+        page_source_data = page_source_raw['page_source']
 
         try:
             if page_source_data == '':
                 raise ValueError()
         
             soup = BeautifulSoup(page_source_data, 'html.parser')
-
+        # DATA GENERAL
+            data_general = {
+                'link': page_source_raw['link'],
+                'time_crawling': page_source_raw['time_crawling']
+            }
         # DATA SHOW IN UI (everything you see when open website - ABOUT PRODUCT)
             displayed_data_container = {}
-            # Link post
-            displayed_data_container['Link'] = link
             # Title of post
-            displayed_data_container['Title'] = self.get_data_safe(soup, '.re__pr-title.pr-title.js__pr-title', return_text=True)
+            displayed_data_container['title'] = self.get_data_safe(soup, '.re__pr-title.pr-title.js__pr-title', return_text=True)
             # Address
-            displayed_data_container['Address'] = self.get_data_safe(soup, '.re__pr-short-description.js__pr-address', return_text=True)
+            displayed_data_container['address'] = self.get_data_safe(soup, '.re__pr-short-description.js__pr-address', return_text=True)
             # Vertified from batdongsan
-            displayed_data_container['Verified'] = self.get_data_safe(soup, '.re__pr-stick-listing-verified') is not None
-            # Image links - string
-            img_links = self.get_data_safe(soup, '.re__media-thumb-item.js__media-thumbs-item > img', multi_value=True, attr='src')
-            if img_links:
-                displayed_data_container['Images'] = ','.join(img_links)
-            else:
-                displayed_data_container['Images'] = None
+            displayed_data_container['verified'] = self.get_data_safe(soup, '.re__pr-stick-listing-verified') is not None
+
+            # # Image links - string
+            # img_links = self.get_data_safe(soup, '.re__media-thumb-item.js__media-thumbs-item > img', multi_value=True, attr='src')
+            # if img_links:
+            #     displayed_data_container['Images'] = ','.join(img_links)
+            # else:
+            #     displayed_data_container['Images'] = None
 
             # Example in ./image/example/a.png
             a = self.get_data_safe(soup, '.re__pr-short-info-item.js__pr-short-info-item', multi_value=True)
@@ -215,56 +214,32 @@ class Extract():
             # print(now)
 
             full_data = {}
+            full_data.update(data_general)
             full_data.update(undisplayed_info)
             full_data.update(landlord_needed_info)
             full_data.update(displayed_data_container)
 
-            print_banner_colored(f'Link {index} success', 'success')
+            print_banner_colored(f'Scraping successful !', 'success'), 
             return full_data
         except KeyboardInterrupt:
             sys.exit("NGẮT CHƯƠNG TRÌNH TỪ BÀN PHÍM !!")
         except:
-            print_banner_colored(f'Link {index} failed', 'danger')
+            print_banner_colored(f'Scraping failed', 'danger')
             return None
     
     
     def extract(self):
-        for page in range(self.page_start, self.page_to_stop + 1):
-            print_banner_colored(f'Extract data in page {page}', 'small')
-            path_to_page_source = SAVE_DATA_PATH['PAGE_SOURCE'](page)
-            path_to_data = SAVE_DATA_PATH['DATA'](page)
+        while len(self.files_need_scraping) != 0:
+            file_page_source_name = self.files_need_scraping.pop()
+            print(file_page_source_name)
+            file_page_source_id = search_file_id(file_page_source_name, os.getenv(self.PATH['FOLDER_STORAGE_ID_ENV_NAME']))
+            page_source_raw = download_file(file_page_source_id)
 
-            with open(path_to_page_source, 'r') as file:
-                all_page_source = json.load(file)
-            
-            all_data_extracted = []
+            data_scraped = self.extract_one_page_source(page_source_raw)
+            file_name = file_page_source_name
+            upload_file(os.getenv(self.PATH['FOLDER_SCRAPING_ENV_NAME']), file_name, data_upload=data_scraped, type='replace')
+            upload_file(os.getenv(self.PATH['FOLDER_SCRAPING_ENV_NAME']), self.PATH['EXTRACT'].name, data_upload=self.files_need_scraping, type='replace')
+            print_banner_colored('Upload extract file thành công!!', 'success')
 
-            for index, (link, page_source) in enumerate(all_page_source.items()):
-                data_extracted = self.extract_one_page_source(link, page_source, index)
-
-                if not data_extracted:
-                    try_again = 0
-                    while (not data_extracted) and (try_again < 5):
-                        alter_page_source = get_data_in_link(link)
-                        data_extracted = self.extract_one_page_source(link, alter_page_source, index)
-                        try_again += 1
-                    
-                    if data_extracted:
-                        all_page_source[link] = alter_page_source
-                        with open(path_to_page_source, 'w') as file:
-                            json.dump(all_page_source, file)
-                    
-                if data_extracted:
-                    all_data_extracted.append(data_extracted)
-
-            with open(path_to_data, 'w') as file:
-                json.dump(all_data_extracted, file, ensure_ascii=False)
-
-            with open(CHECKPOINTS_PATH['EXTRACT'], 'w') as file:
-                json.dump(page + 1, file, ensure_ascii=False)
-
-if __name__ == '__main__':
-    run = Extract()
-    run.extract()
 
     
