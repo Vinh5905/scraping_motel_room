@@ -201,6 +201,19 @@ def search_file_id(headers, name, folder_id=None):
         return {}
 
 
+@decorator_access_token
+def delete_file(headers, file_id):
+    url = f'{MS_GRAPH_BASE_URL}/me/drive/items/{file_id}'
+
+    response = requests.delete(url, headers=headers)
+    response.raise_for_status()
+
+    if response.status_code == 204:
+        print(f'Delete file successful !')
+        return (True, None)
+    else:
+        print(f'Failed delete_file : {response.status_code} -> Maybe this file not exist')
+        return None
 
 def get_access_token_for_current():
     dotenv.load_dotenv()
@@ -213,6 +226,7 @@ def get_access_token_for_current():
 
     return access_token
 
-# print(get_access_token_for_current())
+if __name__ == '__main__':
+    print(get_access_token_for_current())
 # dotenv.load_dotenv()
 # print(list_folder_children(folder_id=os.getenv('FOLDER_FRAUD_DETECTION_ID')))

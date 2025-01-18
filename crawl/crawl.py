@@ -4,10 +4,10 @@ import json
 import re
 import threading
 from selenium.webdriver.common.by import By
-from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled, base64_to_binary, save_link, reset_previous_crawl
+from shared.support_func import get_new_driver, get_pos_start_crawl, get_link_page, is_login, change_cookies_driver, save_imgs, save_page_source, is_crawled, base64_to_binary, save_link, reset_previous_crawl, save_page_source_need_scraping
 from shared.colorful import print_banner_colored
 from shared.globals import LOCK_DATA, LOCK_PREVIOUS_CRAWL, LOCK_LINK_LIST, CHECKPOINTS_PATH, CHECKPOINTS_PATH_TEST, COOKIES_PATH
-from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info
+from msgraph_onedrive.syn import update_crawl_info, update_link_list, update_extract_info, pull_from_onedrive
 
 # Wait cho ảnh hiện hết lên rồi mới lấy đượcc
 
@@ -16,21 +16,18 @@ class Crawl:
     __page_num = None
     __link_num = None
     __driver_num = None
-    __web = None
     __security = False
 
-    def __init__(self, web, test, driver_num = 1):
+    def __init__(self, PATH, driver_num = 1):
+        self.PATH = PATH
         self.__driver_num = driver_num
-        self.__web = web
 
-        match (self.__web):
+        match (self.PATH['NAME']):
             case 'BATDONGSAN':
                 self.__base_link = 'http://batdongsan.com.vn/cho-thue-nha-tro-phong-tro-tp-hcm'
-                self.PATH = CHECKPOINTS_PATH_TEST['BATDONGSAN'] if test else CHECKPOINTS_PATH['BATDONGSAN']
             case 'CHOTOT':
                 self.__security = True
                 self.__base_link = 'https://www.nhatot.com/thue-phong-tro-tp-ho-chi-minh'
-                self.PATH = CHECKPOINTS_PATH_TEST['CHOTOT'] if test else CHECKPOINTS_PATH['CHOTOT']
 
         self.driver = get_new_driver(driver_num=self.__driver_num, security=self.__security)
         
@@ -109,7 +106,7 @@ class Crawl:
             # self.quit_current_driver()
             # self.driver = get_new_driver(self.__driver_num)
 
-        # try: 
+        try: 
             self.driver.get(get_link_page(self.__base_link, page, self.PATH))
             if not is_login(self.driver, self.PATH):
                 change_cookies_driver(self.driver, self.PATH)
@@ -126,13 +123,13 @@ class Crawl:
                 print_banner_colored(title=f'(PAGE {page})', style='success')
                 return all_links
             
-        # except:
-        #     if try_again < 5:
-        #         print_banner_colored(title=f'(PAGE {page})', style='danger')
+        except:
+            if try_again < 5:
+                print_banner_colored(title=f'(PAGE {page})', style='danger')
 
-        #         return self.get_all_links_in_page(try_again=(try_again + 1))
-        #     else:
-        #         raise ValueError("Need to get again, can't get this page!!!!")
+                return self.get_all_links_in_page(try_again=(try_again + 1))
+            else:
+                raise ValueError("Need to get again, can't get this page!!!!")
             
 
     def get_data_in_link(self, link, try_again = 0):
@@ -149,6 +146,7 @@ class Crawl:
                 case 'BATDONGSAN':
                     # Start to get open link
                     self.driver.get(link)
+
                     time.sleep(4)  # Maybe wait for script code (sometime not show immediately) --- or don't need to do that, just re-run again:>
                     if not is_login(self.driver, self.PATH):
                         change_cookies_driver(self.driver, self.PATH)
@@ -209,7 +207,13 @@ class Crawl:
 
                 return self.get_data_in_link(link, try_again=(try_again + 1))
             else:
-                raise ValueError("Can't get data from this page for some reason!!;!!")
+                check = input('VẤN ĐỀ CÓ THỂ DO NETWORK HOẶC POP UP KHÔNG XÁC ĐỊNH, CRAWL LẠI?  [Y] Yes   [N] No      : ')
+                match check:
+                    case 'Y' | 'y':
+                        crawl = MultiCrawl(self.PATH)
+                        crawl.crawl()
+                    case '_':
+                        raise ValueError("Can't get data from this page for some reason!!;!!")
     
     def save_change_page_link_num(self, page_num, link_num, value_to_stop, exist=False):
         with LOCK_PREVIOUS_CRAWL:
@@ -271,6 +275,7 @@ class Crawl:
                 # Save data
                 with LOCK_DATA: 
                     save_page_source(self.__page_num, self.__link_num, data[0], self.PATH)
+                    save_page_source_need_scraping(self.__page_num, self.__link_num, self.PATH)
 
                 save_imgs(self.__page_num, self.__link_num, data[1], self.PATH)
                 # If success then change file previous_crawl.txt to next post
@@ -279,24 +284,18 @@ class Crawl:
 
 
 class MultiCrawl:
-    def __init__(self, web: str, count_driver, test = False): 
-        web = web.upper()
+    def __init__(self, PATH, count_driver = 1): 
+        self.PATH = PATH
+        self.__count_driver = count_driver
 
-        if web in ('BATDONGSAN', 'CHOTOT'):
-            self.__count_driver = count_driver
-            self.__web = web
-            self.__test = test
-
-            PATH = CHECKPOINTS_PATH_TEST[web] if self.__test else CHECKPOINTS_PATH[web]
-
-            # Step before crawl
-            PATH['CHECKPOINT'].mkdir(exist_ok=True)
-            reset_previous_crawl(CHECKPOINTS_PATH_TEST[web] if self.__test else CHECKPOINTS_PATH[web])
-        else:
-            raise ValueError('WEB phải thuộc batdongsan - chotot')
+        PATH['CHECKPOINT'].mkdir(exist_ok=True)
+        
+        # Nhớ phải để pull trước reset (pull thì isCrawling vẫn là True)
+        pull_from_onedrive(PATH)
+        reset_previous_crawl(PATH)
 
     def crawl(self):
         for i in range(self.__count_driver):
-            single_crawl = Crawl(self.__web, self.__test, driver_num = i + 1)
+            single_crawl = Crawl(self.PATH, driver_num = i + 1)
             thread = threading.Thread(target=single_crawl.crawl)
             thread.start()
